@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { createInterface } from "node:readline";
+import type { CodexTurnInput } from "./turnInput.js";
 
 type PendingRequest = {
   resolve: (value: unknown) => void;
@@ -22,7 +23,7 @@ export interface CodexClient extends EventEmitter<AppServerEvents> {
   initialize(): Promise<void>;
   startThread(workspace: string): Promise<{ threadId: string }>;
   resumeThread(threadId: string, workspace: string): Promise<{ threadId: string }>;
-  startTurn(threadId: string, text: string, workspace: string): Promise<{ turnId: string }>;
+  startTurn(threadId: string, input: CodexTurnInput[], workspace: string): Promise<{ turnId: string }>;
   interruptTurn(threadId: string, turnId: string): Promise<void>;
   respond(id: string | number, result: unknown): void;
   stop(): void;
@@ -106,10 +107,10 @@ export class AppServerClient extends EventEmitter<AppServerEvents> {
     return { threadId: resumedThreadId };
   }
 
-  async startTurn(threadId: string, text: string, workspace: string): Promise<{ turnId: string }> {
+  async startTurn(threadId: string, input: CodexTurnInput[], workspace: string): Promise<{ turnId: string }> {
     const response = (await this.request("turn/start", {
       threadId,
-      input: [{ type: "text", text, text_elements: [] }],
+      input,
       cwd: workspace,
       approvalPolicy: "untrusted"
     })) as { turn?: { id?: string } };

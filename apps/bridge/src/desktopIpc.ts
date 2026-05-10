@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
 import type { AppServerEvents, CodexClient, CodexClientMode } from "./appServer.js";
+import type { CodexTurnInput } from "./turnInput.js";
 
 type PendingIpcRequest = {
   resolve: (value: unknown) => void;
@@ -107,7 +108,7 @@ export class DesktopIpcClient extends EventEmitter<AppServerEvents> implements C
     return { threadId };
   }
 
-  async startTurn(threadId: string, text: string, workspace: string): Promise<{ turnId: string }> {
+  async startTurn(threadId: string, input: CodexTurnInput[], workspace: string): Promise<{ turnId: string }> {
     this.threadId = threadId;
     this.resetOutputBaseline();
     const result = await this.request(
@@ -115,7 +116,7 @@ export class DesktopIpcClient extends EventEmitter<AppServerEvents> implements C
       {
         conversationId: threadId,
         turnStartParams: {
-          input: [{ type: "text", text, text_elements: [] }],
+          input,
           cwd: workspace || this.cwd
         }
       },

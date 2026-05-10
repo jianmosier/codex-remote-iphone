@@ -1,18 +1,46 @@
 # codex-remote-iphone
 
-Scan a QR code on your phone and control the Codex session on your computer through a temporary Cloudflare Quick Tunnel.
+Use your iPhone to control the Codex session running on your computer.
 
-This is a v0.1 MVP / experimental project. It is MIT licensed: you can use, modify, distribute, self-host, and commercially use the code.
+`codex-remote-iphone` starts a small local bridge, opens a temporary Cloudflare Quick Tunnel, prints a QR code, and lets your phone send prompts into Codex Desktop after local approval.
 
-## What It Does
+This is a v0.1 MVP / experimental project. The code is MIT licensed and can be used, modified, self-hosted, distributed, and used commercially.
 
-- Starts a local bridge server on `127.0.0.1:8787`.
-- When launched from Codex Desktop with `CODEX_THREAD_ID`, connects to the Desktop app's local IPC and forwards phone prompts into the current desktop-owned thread.
-- Falls back to `codex app-server` over stdio JSON-RPC when Desktop IPC is unavailable or when you ask for an isolated phone thread.
-- Starts a temporary Cloudflare Quick Tunnel.
-- Prints a QR code containing the temporary URL and pairing token.
-- Lets your phone send prompts, watch streaming output, approve or deny commands, interrupt a turn, and stop the session.
-- Records local audit logs in `~/.codex-remote-iphone/audit.log`.
+## Quick Start
+
+### 1. Install
+
+```bash
+git clone https://github.com/jianmosier/codex-remote-iphone.git
+cd codex-remote-iphone
+npm install
+npm run install-skill
+npm run doctor
+```
+
+### 2. Start From Codex Desktop
+
+In Codex, run:
+
+```text
+[$codex-remote-iphone] start
+```
+
+The command builds the phone UI, starts the bridge, starts a Cloudflare Quick Tunnel, and prints a QR code.
+
+### 3. Scan And Approve
+
+Scan the QR code with your phone, then approve the pairing on your computer. After pairing, the phone can control the same Codex Desktop thread.
+
+## What The Phone Can Do
+
+- Send prompts to the current Codex Desktop session.
+- Attach images from Photos or camera with the `+` button.
+- Watch Codex responses stream back.
+- See your sent messages in the session history.
+- Approve, deny, or cancel command/file approval requests.
+- Interrupt a running turn.
+- View connected devices and recent access events.
 
 ## Requirements
 
@@ -24,169 +52,129 @@ This is a v0.1 MVP / experimental project. It is MIT licensed: you can use, modi
 
 `cloudflared` is optional before first run. If it is missing, `npm run start` attempts to download a project-local copy.
 
-## Quick Start
+## Skill Commands
 
-```bash
-git clone https://github.com/jianmosier/codex-remote-iphone.git
-cd codex-remote-iphone
-npm install
-npm run install-skill
-npm run doctor
+After `npm run install-skill`, use the skill as the normal command surface:
+
+```text
+[$codex-remote-iphone] start      # start or show a phone QR
+[$codex-remote-iphone] qr         # rotate a fresh one-time pairing token
+[$codex-remote-iphone] status     # show workspace, URL, mode, and process health
+[$codex-remote-iphone] stop       # stop bridge and tunnel
+[$codex-remote-iphone] restart    # rebuild UI and restart with the recorded workspace
+[$codex-remote-iphone] update     # pull the latest GitHub version and reinstall the skill
+[$codex-remote-iphone] new        # start an isolated phone-only Codex session
+[$codex-remote-iphone] max        # show maximum active devices
+[$codex-remote-iphone] max 2      # set maximum active devices to 2
+[$codex-remote-iphone] approvals  # list pending desktop pairing approvals
+[$codex-remote-iphone] logs       # show recent audit events
+[$codex-remote-iphone] doctor     # diagnose local setup
 ```
 
-Start a remote console for any local workspace:
+You should not need to remember the project directory during normal use. The installed skill records the clone path in `project-root.txt`.
+
+## Terminal Commands
+
+If you are not using the Codex skill, start a console manually:
 
 ```bash
 npm run start -- --workspace /absolute/path/to/your/project
 ```
 
-Scan the printed QR code with your phone. After scanning, the phone waits for desktop approval before it receives an authenticated session.
-
-When started from inside Codex Desktop, `codex-remote-iphone` automatically uses the current `CODEX_THREAD_ID`. By default it first tries `desktop-ipc` mode: phone messages are sent to the Codex Desktop app as follower requests, so the desktop thread remains the owner and should show the same turn locally. The phone UI subscribes to Desktop stream-state broadcasts and mirrors output, approvals, command output, and diff summaries.
-
-Use an isolated phone-only thread when you do not want to bind the phone to the current Desktop thread:
+Start an isolated phone-only session:
 
 ```bash
 npm run new -- --workspace /absolute/path/to/your/project
 ```
 
-You can also resume a specific thread or force standalone app-server mode:
-
-```bash
-npm run start -- --workspace /absolute/path/to/your/project --thread-id 019e...
-npm run start -- --workspace /absolute/path/to/your/project --no-desktop-sync
-```
-
-For local-only development without Cloudflare:
+Run locally without Cloudflare:
 
 ```bash
 npm run dev -- --workspace /absolute/path/to/your/project
 ```
 
-Stop the foreground process with `Ctrl-C`, from the phone UI, or from another terminal:
+Stop from another terminal:
 
 ```bash
 npm run stop
 ```
 
-## Skill Usage
-
-Install the bundled Codex skill once from your clone:
+Update an existing clone:
 
 ```bash
-npm run install-skill
+npm run update
 ```
 
-The installer copies the skill into `$CODEX_HOME/skills/codex-remote-iphone` or `~/.codex/skills/codex-remote-iphone`, then records the current clone path in `project-root.txt`. After that, use the skill as the command surface:
+`update` refuses to run when local uncommitted changes exist. On a clean clone it performs a fast-forward Git update, runs `npm install`, and reinstalls the Codex skill.
 
-```text
-[$codex-remote-iphone] help
-[$codex-remote-iphone] start
-[$codex-remote-iphone] new
-[$codex-remote-iphone] stop
-[$codex-remote-iphone] restart
-[$codex-remote-iphone] status
-[$codex-remote-iphone] qr
-[$codex-remote-iphone] max
-[$codex-remote-iphone] max 2
-[$codex-remote-iphone] doctor
-[$codex-remote-iphone] logs
-```
+## How It Works
 
-`max 2` means "set the maximum active device count to 2".
+- `desktop-ipc`: default inside Codex Desktop when `CODEX_THREAD_ID` and the local Desktop IPC socket are available. Phone prompts are relayed into the desktop-owned thread.
+- `app-server`: fallback mode for CLI-only use, unavailable Desktop IPC, `new`, or `--no-desktop-sync`.
 
-`new` means "start an isolated phone-only Codex session". It does not bind phone turns to the current Codex Desktop thread.
-
-`restart` means "stop the recorded remote console, then start it again with the same workspace, port, thread label, and Codex mode". Use it after pulling code or changing the web UI.
-
-Codex should translate those skill commands into the local npm scripts for you. You should not need to remember the project directory or the underlying script names during normal use.
-
-The raw command reference is available with:
-
-```bash
-npm run help
-```
-
-QR behavior:
-
-- `start` creates a new Quick Tunnel URL and a fresh one-time pairing token.
-- While the same tunnel keeps running, the hostname can stay the same.
-- `qr` rotates only the pairing token, so the `#token=...` part changes even when the hostname does not.
-- Tokens expire after 10 minutes and are consumed after a successful login.
+The bridge never exposes Codex Desktop IPC or `codex app-server` directly to the internet. The public endpoint is the authenticated bridge only.
 
 ## Security Defaults
 
-- The pairing token expires after 10 minutes.
-- The token is placed in the URL fragment (`#token=...`) so it is not sent to the origin until the phone page explicitly logs in.
-- Desktop pairing approval is enabled by default. After a phone scans the QR code, the bridge asks the computer to approve the pairing before it issues a session cookie.
-- On macOS, the bridge shows a native approval dialog. The same flow can be controlled from the command line:
-
-```bash
-npm run approvals
-npm run approve -- <pairing-request-id>
-npm run deny -- <pairing-request-id>
-npm run max -- 2
-```
-
+- Pairing tokens expire after 10 minutes and are consumed after login.
+- Tokens live in the URL fragment (`#token=...`) so they are not sent to Cloudflare until the phone page explicitly logs in.
+- Desktop pairing approval is enabled by default.
 - Default active device limit is 1.
 - If a new device exceeds the limit, the default policy is `disconnectAll`: interrupt the current turn, revoke sessions, close WebSockets, and stop the tunnel.
-- All API and WebSocket traffic requires an authenticated session after pairing.
+- Image attachments are uploaded only after pairing and stored under `~/.codex-remote-iphone/uploads/`.
+- Audit logs are written to `~/.codex-remote-iphone/audit.log`.
 
-Edit local policy in:
+Local policy lives at:
 
 ```text
 ~/.codex-remote-iphone/config.json
 ```
 
-Example:
-
-```json
-{
-  "maxActiveDevices": 1,
-  "deviceTokenTtlMinutes": 10,
-  "requireDesktopPairingApproval": true,
-  "desktopApprovalPrompt": true,
-  "pairingApprovalTtlSeconds": 120,
-  "onDeviceLimitExceeded": "disconnectAll",
-  "auditLogRetentionDays": 30
-}
-```
-
-## Codex Session Model
-
-There are two runtime modes:
-
-- `desktop-ipc`: default inside Codex Desktop when `CODEX_THREAD_ID` and the local Desktop IPC socket are available. The bridge does not expose Desktop IPC to the internet; it only accepts authenticated phone requests and relays them locally.
-- `app-server`: fallback mode for CLI-only use, unavailable Desktop IPC, `--new-thread`, or `--no-desktop-sync`.
-
-The phone Access Monitor shows the active mode. `npm run status` also prints `Codex mode`.
-
-## Network Model
+## Network Notes
 
 `codex-remote-iphone` treats the computer and phone as two different network paths:
 
-- Computer egress: `cloudflared` is launched from the local computer and inherits `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and related environment variables.
-- Phone delivery: the QR URL must work for the phone browser directly. Startup checks the Quick Tunnel hostname through common global and China DNS resolvers, then performs direct HTTPS checks without using the computer's proxy before printing the QR code.
-- If the computer can open a URL only through a proxy but the phone shows Cloudflare 1016/1033, treat it as a DNS/tunnel propagation issue and restart until the startup checks pass.
+- Computer egress may use local proxy env vars such as `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`.
+- Phone delivery must work directly from the phone browser.
+- Startup checks common DNS resolvers and no-proxy HTTPS before printing the QR code.
+
+If the phone sees Cloudflare 1016/1033, rotate or restart until startup checks pass:
+
+```text
+[$codex-remote-iphone] qr
+[$codex-remote-iphone] restart
+```
+
+## Repository Hygiene
+
+The GitHub repository should contain the deliverable source project only. Local runtime and debugging artifacts are intentionally ignored, including:
+
+- `node_modules/`
+- `apps/web/dist/`
+- `.playwright-cli/`
+- `coverage/`
+- `playwright-report/`
+- local logs, env files, caches, and temporary output
+
+Runtime data such as sessions, audit logs, uploaded images, downloaded `cloudflared`, and generated QR codes live under `~/.codex-remote-iphone/`, not in this repository.
 
 ## Buy Me A Coffee / 请喝咖啡
 
 Sponsorship is optional. The code remains MIT licensed either way.
 
-GitHub Sponsors is not configured in the v0.1 placeholder release. When you are ready, uncomment and replace the username in `.github/FUNDING.yml`.
-
-Domestic QR placeholders:
+Domestic sponsorship:
 
 ![WeChat Pay](docs/sponsor/wechat-placeholder.png)
 ![Alipay](docs/sponsor/alipay-placeholder.png)
 
-Replace the placeholder images with real payment QR codes before promoting sponsorship.
+Replace the placeholder images with the real payment QR code images before publishing a sponsorship-ready release.
+
+GitHub Sponsors is not configured in the v0.1 placeholder release. When ready, uncomment and replace the username in `.github/FUNDING.yml`.
 
 ## Caveats
 
 - Cloudflare Quick Tunnel is intended for development/testing. It does not provide a permanent URL or production SLA.
-- Quick Tunnel random hostnames can briefly fail DNS propagation on some recursive resolvers. Startup validates common public and China DNS resolvers plus no-proxy HTTP before showing the QR code.
 - `codex app-server` is experimental. Protocol details may change across Codex versions.
-- Desktop IPC is an internal Codex Desktop integration surface. If Codex changes that protocol, the bridge may fall back to standalone `app-server` mode until this project is updated.
-- v0.1 is optimized for macOS + Codex Desktop. Other platforms may work through standalone `app-server` mode, but they are not the main target yet.
+- Desktop IPC is an internal Codex Desktop integration surface and may change.
+- v0.1 is optimized for macOS + Codex Desktop.
 - Do not expose this tool casually; it can operate a local coding agent with file and command capabilities.

@@ -15,6 +15,10 @@ Installed copies of this skill should include `project-root.txt`, written by `np
 
 When `CODEX_THREAD_ID` is present, the console should use the current Codex Desktop thread by default. It first tries `desktop-ipc` mode: the bridge connects to the local Codex Desktop IPC socket, sends phone prompts as Desktop follower requests, and subscribes to Desktop stream-state broadcasts so the phone and desktop see the same turn. Use `new`, `start new`, `--new-thread`, or `--no-desktop-sync` only when the user asks for an isolated phone session or explicit standalone `codex app-server` mode.
 
+The phone UI supports image attachments after pairing. Images are uploaded through the authenticated bridge, stored under `~/.codex-remote-iphone/uploads/`, then sent to Codex as `localImage` turn inputs. If the user asks why images require a restart after upgrading, explain that the running bridge serves the previously built web UI until `[$codex-remote-iphone] restart` rebuilds and restarts it.
+
+Phone UI regressions to guard against: the composer should expose attachments through a compact `+` button that opens attachment choices such as Image; it should not place a dedicated Image button beside Send as a peer action. User-submitted prompts must appear in the Session transcript immediately and remain visible after the server echoes or reconnects.
+
 ## Command Interface
 
 Treat `[$codex-remote-iphone] <command>` as the primary user interface. The user should not need to remember `cd`, npm workspace names, or script flags for normal operation.
@@ -26,6 +30,7 @@ Supported command meanings:
 - `new` or `start new`: run `npm run new` to start an isolated phone-only Codex thread. This does not bind the phone to the current Codex Desktop thread and uses standalone `app-server` mode.
 - `stop`: locate the project, run `npm run stop`, and report whether the recorded bridge, app-server, and tunnel processes were signaled.
 - `restart`: locate the project, run `npm run restart`, and show the new phone URL/QR. This should reuse the recorded workspace, port, thread label, and Codex mode unless the user passes explicit flags.
+- `update`: locate the project, run `npm run update`, and summarize whether the clone was fast-forwarded from GitHub. If the command reports local changes, tell the user to commit, stash, or discard them before updating. After a successful update, suggest `[$codex-remote-iphone] restart` if a remote console is already running.
 - `status`: run `npm run status` and summarize the active workspace, URL, current thread label, Codex mode, and process health.
 - `qr`: when a session is already recorded, run `npm run qr`; this asks the local bridge to rotate a fresh one-time pairing token and then shows the new QR or URL. The tunnel hostname may stay the same, but the `#token=...` fragment should change.
 - `approvals`: run `npm run approvals` and summarize phone pairing requests waiting for desktop confirmation.
@@ -40,6 +45,16 @@ Supported command meanings:
 When responding to the user, present the skill command as the friendly interface, for example `[$codex-remote-iphone] stop`. Mention raw npm commands only as implementation details when helpful for debugging.
 
 If the user asks what commands exist, how to use this skill, or asks for help, run `npm run help` and relay the concise command list.
+
+## QR Display Rule
+
+Every time `start`, `restart`, or `qr` prints a QR code, verify the output before responding:
+
+- Use the `QR image:` path with the timestamp and nonce in the filename.
+- Never display `~/.codex-remote-iphone/latest-qr.png` in chat; Codex/Desktop may cache that fixed path and show an old QR.
+- Confirm the CLI printed `QR check: fresh unique file`.
+- Confirm the URL/token you share matches the latest command output or `~/.codex-remote-iphone/session.json`.
+- If a QR looks stale or the user reports it does not work, run `[$codex-remote-iphone] qr` to rotate a fresh token and show only the new unique QR file.
 
 ## Workflow
 
@@ -80,6 +95,7 @@ npm run restart
 - Keep the default `maxActiveDevices` at 1 unless the user explicitly asks to change it.
 - Prefer the short command `[$codex-remote-iphone] max 2` when the user asks to change the maximum connected devices.
 - Keep desktop pairing approval enabled by default: QR token first, then local desktop approval before a session cookie is issued.
+- Accept image uploads only through authenticated phone sessions; do not accept arbitrary local file paths from the browser.
 - If device limit is exceeded, the default policy is `disconnectAll`.
 - Audit logs live in `~/.codex-remote-iphone/audit.log`, not in the repo.
 

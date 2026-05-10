@@ -11,6 +11,12 @@ import { mapApprovalDecision, summarizeApproval, type UiApprovalDecision } from 
 import { type AppConfig, loadConfig, saveConfig, normalizeConfig } from "./config.js";
 import { DesktopIpcClient } from "./desktopIpc.js";
 import {
+  IMAGE_UPLOAD_BODY_LIMIT,
+  publicUploadedImage,
+  saveImageUpload,
+  type UploadedImage
+} from "./imageUpload.js";
+import {
   PairingApprovalManager,
   type PairingApprovalRequest,
   type PublicPairingApprovalRequest
@@ -20,6 +26,7 @@ import { SessionManager } from "./sessionManager.js";
 import { parseCookie } from "./system.js";
 import { PairingTokenManager } from "./token.js";
 import { startQuickTunnel, type QuickTunnel } from "./tunnel.js";
+import { buildTurnInput, normalizeImageIds, transcriptTextForTurn } from "./turnInput.js";
 
 type StartOptions = {
   workspace: string;
@@ -31,7 +38,7 @@ type StartOptions = {
 };
 
 type ClientMessage =
-  | { type: "turn.start"; text: string }
+  | { type: "turn.start"; text?: string; images?: unknown; clientMessageId?: string }
   | { type: "turn.interrupt" }
   | { type: "approval.decide"; requestId: string | number; decision: UiApprovalDecision }
   | { type: "userInput.submit"; requestId: string | number; answers: UserInputAnswers }
@@ -45,6 +52,7 @@ type TranscriptMessage = {
   role: "user" | "assistant" | "plan" | "command" | "system" | "error";
   text: string;
   createdAt: string;
+  clientMessageId?: string;
 };
 
 export class RemoteConsole {
@@ -66,9 +74,10 @@ export class RemoteConsole {
   private shuttingDown = false;
   private transcript: TranscriptMessage[] = [];
   private nextTranscriptId = 1;
+  private uploadedImages = new Map<string, UploadedImage & { sessionId: string }>();
 
   private constructor(private options: StartOptions) {
-    this.app = Fastify({ logger: false });
+    this.app = Fastify({ logger: false, bodyLimit: IMAGE_UPLOAD_BODY_LIMIT });
   }
 
   static async start(options: StartOptions): Promise<RemoteConsole> {
@@ -322,6 +331,28 @@ export class RemoteConsole {
       return this.rotatePairing("ui");
     });
 
+    this.app.post("/api/uploads/images", async (request, reply) => {
+      const session = this.getSession(request);
+      if (!session) return reply.code(401).send({ error: "not authenticated" });
+      try {
+        const image = await saveImageUpload(request.body as Record<string, unknown>);
+        this.uploadedImages.set(image.id, { ...image, sessionId: session.id });
+        await this.audit.append({
+          type: "upload.image",
+          sessionIdHash: hashSessionId(session.id),
+          detail: { id: image.id, name: image.name, mimeType: image.mimeType, size: image.size }
+        });
+        return publicUploadedImage(image);
+      } catch (error) {
+        await this.audit.append({
+          type: "upload.image.failed",
+          sessionIdHash: hashSessionId(session.id),
+          detail: { error: (error as Error).message }
+        });
+        return reply.code(400).send({ error: (error as Error).message });
+      }
+    });
+
     this.app.post("/api/local/pairing-token", async (request, reply) => {
       if (!this.isLocalAdminRequest(request)) {
         await this.audit.append({ type: "pairing.rotate.rejected", detail: { reason: "not-local" } });
@@ -416,12 +447,28 @@ export class RemoteConsole {
     this.sessions.touch(sessionId);
     const message = JSON.parse(raw) as ClientMessage;
     if (message.type === "turn.start") {
-      const text = message.text.trim();
-      if (!text) return;
-      this.appendTranscript("user", text);
-      const turn = await this.appServer.startTurn(this.threadId, text, this.options.workspace);
+      const text = typeof message.text === "string" ? message.text.trim() : "";
+      const imageIds = normalizeImageIds(message.images);
+      const images = imageIds.map((id) => this.resolveUploadedImage(sessionId, id));
+      if (!text && images.length === 0) return;
+      const clientMessageId = normalizeClientMessageId(message.clientMessageId);
+      this.appendTranscript("user", transcriptTextForTurn(text, images), clientMessageId);
+      const input = buildTurnInput(text, images);
+      const turn = await this.appServer.startTurn(this.threadId, input, this.options.workspace);
       this.currentTurnId = turn.turnId;
-      await this.audit.append({ type: "turn.start", sessionIdHash: hashSessionId(sessionId), detail: { turnId: turn.turnId } });
+      await this.audit.append({
+        type: "turn.start",
+        sessionIdHash: hashSessionId(sessionId),
+        detail: {
+          turnId: turn.turnId,
+          images: images.map((image) => ({
+            id: image.id,
+            name: image.name,
+            mimeType: image.mimeType,
+            size: image.size
+          }))
+        }
+      });
       this.broadcast({ type: "turn.started", turnId: turn.turnId });
       return;
     }
@@ -684,13 +731,18 @@ export class RemoteConsole {
     }
   }
 
-  private appendTranscript(role: TranscriptMessage["role"], text: string): TranscriptMessage | null {
+  private appendTranscript(
+    role: TranscriptMessage["role"],
+    text: string,
+    clientMessageId?: string
+  ): TranscriptMessage | null {
     if (!text) return null;
     const entry: TranscriptMessage = {
       id: this.nextTranscriptId++,
       role,
       text,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      ...(clientMessageId ? { clientMessageId } : {})
     };
     this.transcript = [...this.transcript, entry].slice(-300);
     this.broadcast({ type: "transcript.append", entry });
@@ -707,6 +759,12 @@ export class RemoteConsole {
       return;
     }
     this.appendTranscript(role, delta);
+  }
+
+  private resolveUploadedImage(sessionId: string, imageId: string): UploadedImage {
+    const image = this.uploadedImages.get(imageId);
+    if (!image || image.sessionId !== sessionId) throw new Error("Image attachment expired or not found");
+    return image;
   }
 
   private async rotatePairing(source: string): Promise<{ url: string; pairing: ReturnType<PairingTokenManager["snapshot"]> }> {
@@ -788,6 +846,13 @@ function makeSessionCookie(sessionId: string, secure: boolean): string {
 
 function truncateLogLine(line: string): string {
   return line.length > 1000 ? `${line.slice(0, 1000)}... [truncated]` : line;
+}
+
+function normalizeClientMessageId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 120) return undefined;
+  return trimmed;
 }
 
 function summarizeUserInput(params: Record<string, unknown>): Record<string, unknown> {

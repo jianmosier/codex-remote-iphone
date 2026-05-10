@@ -28,6 +28,7 @@
     "start": "npm --workspace @codex-remote-iphone/bridge run start --",
     "prerestart": "npm --workspace @codex-remote-iphone/web run build",
     "restart": "npm --workspace @codex-remote-iphone/bridge run restart --",
+    "update": "npm --workspace @codex-remote-iphone/bridge run update --",
     "prenew": "npm --workspace @codex-remote-iphone/web run build",
     "new": "npm --workspace @codex-remote-iphone/bridge run new --",
     "predev": "npm --workspace @codex-remote-iphone/web run build",

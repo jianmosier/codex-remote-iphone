@@ -1,11 +1,26 @@
-import { Activity, Check, Coffee, Lock, MessageSquare, Power, RefreshCcw, Send, Shield, Square } from "lucide-react";
+import {
+  Activity,
+  Check,
+  Coffee,
+  ImagePlus,
+  Lock,
+  MessageSquare,
+  Plus,
+  Power,
+  RefreshCcw,
+  Send,
+  Shield,
+  Square,
+  X
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type TranscriptEntry = {
+export type TranscriptEntry = {
   id: number;
   role: "user" | "assistant" | "plan" | "command" | "system" | "error";
   text: string;
   createdAt: string;
+  clientMessageId?: string;
 };
 
 type SessionPayload = {
@@ -87,6 +102,18 @@ type PairingApprovalState = {
   sessionIdHash?: string;
 };
 
+export type UploadedImage = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  previewUrl: string;
+};
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGES_PER_TURN = 4;
+
 let localEntryId = -1;
 
 export function App() {
@@ -102,9 +129,13 @@ export function App() {
   const [pairingApproval, setPairingApproval] = useState<PairingApprovalState | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [text, setText] = useState("");
+  const [attachments, setAttachments] = useState<UploadedImage[]>([]);
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("Disconnected");
   const wsRef = useRef<WebSocket | null>(null);
   const outputRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pairingRequestRef = useRef<string | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -249,7 +280,7 @@ export function App() {
       if (payload.status) setStatus(String(payload.status));
     } else if (payload.type === "transcript.append") {
       const entry = payload.entry as TranscriptEntry;
-      setTranscript((current) => [...current.filter((item) => item.id !== entry.id), entry].slice(-300));
+      setTranscript((current) => mergeTranscriptAppend(current, entry));
     } else if (payload.type === "transcript.update") {
       const entry = payload.entry as TranscriptEntry;
       setTranscript((current) => current.map((item) => (item.id === entry.id ? entry : item)));
@@ -285,7 +316,7 @@ export function App() {
     return true;
   }
 
-  function addLocalEntry(role: TranscriptEntry["role"], message: string) {
+  function addLocalEntry(role: TranscriptEntry["role"], message: string, clientMessageId?: string) {
     if (!message) return;
     setTranscript((current) =>
       [
@@ -294,16 +325,76 @@ export function App() {
           id: localEntryId--,
           role,
           text: message,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          ...(clientMessageId ? { clientMessageId } : {})
         }
       ].slice(-300)
     );
   }
 
+  async function uploadImages(files: FileList | null) {
+    const selected = Array.from(files ?? []);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!selected.length) return;
+
+    const slots = MAX_IMAGES_PER_TURN - attachments.length;
+    if (slots <= 0) {
+      addLocalEntry("error", `Attach at most ${MAX_IMAGES_PER_TURN} images per message.`);
+      return;
+    }
+    setUploading(true);
+    const uploaded: UploadedImage[] = [];
+    for (const file of selected.slice(0, slots)) {
+      if (!file.type.startsWith("image/")) {
+        addLocalEntry("error", `${file.name} is not an image.`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        addLocalEntry("error", `${file.name} is larger than 8 MB.`);
+        continue;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const response = await fetch("/api/uploads/images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, mimeType: file.type, dataUrl })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? response.statusText);
+        uploaded.push({ ...(data as Omit<UploadedImage, "previewUrl">), previewUrl: dataUrl });
+      } catch (error) {
+        addLocalEntry("error", `Image upload failed: ${(error as Error).message}`);
+      }
+    }
+    if (selected.length > slots) addLocalEntry("error", `Only ${MAX_IMAGES_PER_TURN} images can be attached to one message.`);
+    if (uploaded.length) setAttachments((current) => [...current, ...uploaded].slice(0, MAX_IMAGES_PER_TURN));
+    setUploading(false);
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((current) => current.filter((image) => image.id !== id));
+  }
+
   function startTurn(overrideText?: string) {
     const prompt = (overrideText ?? text).trim();
-    if (!prompt) return;
-    if (sendWs({ type: "turn.start", text: prompt }) && overrideText === undefined) setText("");
+    const images = overrideText === undefined ? attachments : [];
+    if (!prompt && images.length === 0) return;
+    const clientMessageId = createClientMessageId();
+    const displayText = displayTextForTurn(prompt, images);
+    const message = {
+      type: "turn.start",
+      text: prompt,
+      images: images.map((image) => ({ id: image.id })),
+      clientMessageId
+    };
+    if (!sendWs(message)) return;
+    addLocalEntry("user", displayText, clientMessageId);
+    if (overrideText === undefined) {
+      setText("");
+      setAttachments([]);
+      setToolMenuOpen(false);
+    }
   }
 
   function decide(approval: Approval, decision: "accept" | "decline" | "cancel") {
@@ -493,6 +584,35 @@ export function App() {
       </section>
 
       <section className="composer">
+        {toolMenuOpen ? (
+          <div className="attachment-menu">
+            <button
+              type="button"
+              onClick={() => {
+                setToolMenuOpen(false);
+                fileInputRef.current?.click();
+              }}
+              disabled={uploading || hasRunningTurn || attachments.length >= MAX_IMAGES_PER_TURN}
+            >
+              <ImagePlus size={18} />
+              Image
+            </button>
+          </div>
+        ) : null}
+        {attachments.length ? (
+          <div className="attachment-strip" aria-label="Image attachments">
+            {attachments.map((image) => (
+              <div className="attachment-chip" key={image.id}>
+                <img src={image.previewUrl} alt="" />
+                <span>{image.name}</span>
+                <small>{formatBytes(image.size)}</small>
+                <button type="button" className="icon-button" onClick={() => removeAttachment(image.id)} title="Remove image">
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <textarea
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -501,15 +621,38 @@ export function App() {
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !hasRunningTurn) startTurn();
           }}
         />
+        <input
+          ref={fileInputRef}
+          className="file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          onChange={(event) => uploadImages(event.target.files)}
+        />
         <div className="composer-actions">
-          <span>{session?.appServerMode === "desktop-ipc" ? "Desktop session" : "Phone session"}</span>
+          <div className="composer-tools">
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setToolMenuOpen((open) => !open)}
+              disabled={uploading || hasRunningTurn}
+              title="Add attachment"
+            >
+              <Plus size={19} />
+            </button>
+            <span>{session?.appServerMode === "desktop-ipc" ? "Desktop session" : "Phone session"}</span>
+          </div>
           {hasRunningTurn ? (
             <button className="danger" onClick={() => sendWs({ type: "turn.interrupt" })}>
               <Square size={18} />
               Stop response
             </button>
           ) : (
-            <button className="primary" onClick={() => startTurn()} disabled={!text.trim() || status === "Reconnecting"}>
+            <button
+              className="primary"
+              onClick={() => startTurn()}
+              disabled={uploading || (!text.trim() && attachments.length === 0) || status === "Reconnecting"}
+            >
               <Send size={18} />
               Send
             </button>
@@ -596,6 +739,16 @@ function appendUniqueRequest<T extends { requestId: string | number }>(items: T[
   return [...items.filter((current) => current.requestId !== item.requestId), item];
 }
 
+export function mergeTranscriptAppend(current: TranscriptEntry[], entry: TranscriptEntry): TranscriptEntry[] {
+  if (entry.clientMessageId) {
+    const withoutOptimistic = current.filter(
+      (item) => item.id !== entry.id && item.clientMessageId !== entry.clientMessageId
+    );
+    return [...withoutOptimistic, entry].slice(-300);
+  }
+  return [...current.filter((item) => item.id !== entry.id), entry].slice(-300);
+}
+
 function inputAnswerKey(requestId: string | number, questionId: string): string {
   return `${String(requestId)}:${questionId}`;
 }
@@ -619,6 +772,33 @@ function summarizeDiff(diff: string): string {
   const removed = diff.split("\n").filter((line) => line.startsWith("-") && !line.startsWith("---")).length;
   const files = new Set(diff.match(/^diff --git .+$/gm) ?? []).size;
   return `${files || 1} file(s), +${added} / -${removed}`;
+}
+
+export function displayTextForTurn(text: string, images: UploadedImage[]): string {
+  return [text.trim(), ...images.map((image) => `[Image: ${image.name}]`)].filter(Boolean).join("\n");
+}
+
+function createClientMessageId(): string {
+  if ("randomUUID" in crypto) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Could not read image"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function delay(ms: number): Promise<void> {

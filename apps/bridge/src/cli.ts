@@ -1,14 +1,13 @@
+import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import process from "node:process";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import QRCode from "qrcode";
+import { promisify } from "node:util";
 import qrcode from "qrcode-terminal";
 import { AuditLog } from "./audit.js";
-import { getDataDir, loadConfig, normalizeConfig, saveConfig, type AppConfig } from "./config.js";
+import { loadConfig, normalizeConfig, saveConfig, type AppConfig } from "./config.js";
 import { runDoctor } from "./doctor.js";
 import { isPidRunning, readPidFile, stopRecordedProcesses, type RuntimePids } from "./pidStore.js";
+import { saveQrPng } from "./qrImage.js";
 import { RemoteConsole } from "./server.js";
 import { isPortAvailable } from "./system.js";
 
@@ -20,6 +19,8 @@ type CliOptions = {
   requireResume: boolean;
   desktopSync: boolean;
 };
+
+const execFileAsync = promisify(execFile);
 
 async function main(): Promise<void> {
   const [command = "start", ...args] = process.argv.slice(2);
@@ -52,6 +53,11 @@ async function main(): Promise<void> {
     for (const line of await stopRecordedProcesses()) console.log(line);
     await waitForPort(restartOptions.port);
     await runRemote(restartOptions);
+    return;
+  }
+
+  if (normalizedCommand === "update") {
+    await updateFromGitHub();
     return;
   }
 
@@ -133,6 +139,7 @@ Skill usage:
   [$codex-remote-iphone] status
   [$codex-remote-iphone] stop
   [$codex-remote-iphone] restart
+  [$codex-remote-iphone] update       # pull the latest GitHub version safely
   [$codex-remote-iphone] max          # show maximum active devices
   [$codex-remote-iphone] max 3        # set maximum active devices to 3
   [$codex-remote-iphone] approvals
@@ -149,6 +156,7 @@ Raw npm usage:
   npm run status
   npm run stop
   npm run restart
+  npm run update
   npm run max
   npm run max -- 3
   npm run approvals
@@ -164,6 +172,7 @@ Commands:
   start new             Same as new.
   stop                  Stop recorded bridge, app-server, and tunnel processes.
   restart               Stop the recorded session, then start again with the same workspace, port, and thread mode.
+  update                Safely update this clone to the latest GitHub version and reinstall the skill.
   status                Show workspace, thread, Codex mode, URL, and process health.
   qr                    Rotate a one-time pairing token and print a fresh QR.
   approvals             List phone pairing requests waiting for desktop confirmation.
@@ -297,6 +306,37 @@ async function printStatus(): Promise<void> {
   console.log(`Bridge PID: ${pidLine(session.pid)}`);
   console.log(`App-server PID: ${pidLine(session.appServerPid)}`);
   console.log(`Tunnel PID: ${pidLine(session.tunnelPid)}`);
+}
+
+async function updateFromGitHub(): Promise<void> {
+  const repoRoot = (await runCommand("git", ["rev-parse", "--show-toplevel"], process.cwd())).stdout.trim();
+  const status = (await runCommand("git", ["status", "--porcelain"], repoRoot)).stdout.trim();
+  if (status) {
+    console.log("Local changes detected. Commit, stash, or discard them before updating.");
+    console.log("");
+    console.log(status);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Updating codex-remote-iphone at ${repoRoot}`);
+  await runAndPrint("git", ["fetch", "--prune", "origin"], repoRoot);
+  await runAndPrint("git", ["pull", "--ff-only"], repoRoot);
+  await runAndPrint("npm", ["install"], repoRoot);
+  await runAndPrint("npm", ["run", "install-skill"], repoRoot);
+  console.log("");
+  console.log("Update complete. If a remote console is running, use `[$codex-remote-iphone] restart` to load the new bridge and phone UI.");
+}
+
+async function runAndPrint(command: string, args: string[], cwd: string): Promise<void> {
+  console.log(`$ ${[command, ...args].join(" ")}`);
+  const result = await runCommand(command, args, cwd);
+  const output = `${result.stdout}${result.stderr}`.trim();
+  if (output) console.log(output);
+}
+
+async function runCommand(command: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync(command, args, { cwd, maxBuffer: 10 * 1024 * 1024 });
 }
 
 async function printPairingApprovals(): Promise<void> {
@@ -517,24 +557,12 @@ async function printSavedQr(url: string): Promise<void> {
   try {
     const saved = await saveQrPng(url);
     console.log(`QR image: ${saved.timestampedPath}`);
-    console.log(`Latest QR alias: ${saved.latestPath}`);
+    console.log(`QR check: fresh unique file, ${saved.bytes} bytes, generated ${saved.createdAt}`);
+    if (saved.latestPath) console.log(`QR alias for local convenience only: ${saved.latestPath}`);
+    console.log("Display the QR image path above; do not display latest-qr.png in chat.");
   } catch (error) {
     console.log(`Could not save QR image: ${(error as Error).message}`);
   }
-}
-
-async function saveQrPng(url: string): Promise<{ latestPath: string; timestampedPath: string }> {
-  const dataDir = getDataDir();
-  await mkdir(dataDir, { recursive: true });
-  const latestPath = join(dataDir, "latest-qr.png");
-  const host = new URL(url).host.split(".")[0]?.replace(/[^a-z0-9-]/gi, "-") || "local";
-  const stamp = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").replace("Z", "");
-  const nonce = randomUUID().slice(0, 8);
-  const timestampedPath = join(dataDir, `qr-${host}-${stamp}-${nonce}.png`);
-  const options = { margin: 2, width: 720 };
-  await QRCode.toFile(latestPath, url, options);
-  await QRCode.toFile(timestampedPath, url, options);
-  return { latestPath, timestampedPath };
 }
 
 main().catch((error) => {

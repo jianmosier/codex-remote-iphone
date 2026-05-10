@@ -64,6 +64,12 @@ button.compact {
   padding: 6px 10px;
 }
 
+button.icon-button {
+  min-height: 30px;
+  min-width: 30px;
+  padding: 5px;
+}
+
 button.selected {
   border-color: #117a65;
   box-shadow: inset 0 0 0 1px #117a65;
@@ -223,13 +229,89 @@ textarea {
   resize: vertical;
 }
 
-.composer-actions {
-  justify-content: space-between;
+.file-input {
+  display: none;
 }
 
-.composer-actions span {
+.attachment-menu {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d0dbc9;
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  justify-self: start;
+  padding: 6px;
+}
+
+.attachment-menu button {
+  min-height: 36px;
+}
+
+.attachment-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.attachment-chip {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d0dbc9;
+  border-radius: 8px;
+  display: grid;
+  flex: 0 0 min(240px, 88vw);
+  gap: 7px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  padding: 6px;
+}
+
+.attachment-chip img {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  height: 44px;
+  object-fit: cover;
+  width: 44px;
+}
+
+.attachment-chip span {
+  color: #17201d;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip small {
+  color: #66716a;
+  font-size: 11px;
+  grid-column: 2;
+}
+
+.attachment-chip button {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+.composer-actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.composer-tools {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.composer-tools span {
   color: #66716a;
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .button-row {
@@ -498,8 +580,15 @@ footer {
 
   .composer-actions {
     align-items: stretch;
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+  }
+
+  .composer-tools {
+    flex: 1 1 auto;
+  }
+
+  .composer-actions > button {
+    flex: 0 0 auto;
   }
 
   .button-row button {
