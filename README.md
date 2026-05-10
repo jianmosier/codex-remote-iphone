@@ -130,8 +130,18 @@ Sponsorship is optional. The code remains MIT licensed either way.
 
 Domestic sponsorship:
 
-![WeChat Pay](docs/sponsor/wechat.jpg)
-![Alipay](docs/sponsor/alipay.jpg)
+<table>
+  <tr>
+    <td align="center">
+      <strong>WeChat Pay</strong><br>
+      <img src="docs/sponsor/wechat.jpg" alt="WeChat Pay QR code" width="220">
+    </td>
+    <td align="center">
+      <strong>Alipay</strong><br>
+      <img src="docs/sponsor/alipay.jpg" alt="Alipay QR code" width="220">
+    </td>
+  </tr>
+</table>
 
 The two images above are optional coffee-money QR codes for people who want to support the project.
 
