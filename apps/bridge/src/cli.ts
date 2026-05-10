@@ -8,8 +8,9 @@ import qrcode from "qrcode-terminal";
 import { AuditLog } from "./audit.js";
 import { getDataDir, loadConfig, normalizeConfig, saveConfig, type AppConfig } from "./config.js";
 import { runDoctor } from "./doctor.js";
-import { isPidRunning, readPidFile, stopRecordedProcesses } from "./pidStore.js";
+import { isPidRunning, readPidFile, stopRecordedProcesses, type RuntimePids } from "./pidStore.js";
 import { RemoteConsole } from "./server.js";
+import { isPortAvailable } from "./system.js";
 
 type CliOptions = {
   workspace: string;
@@ -42,6 +43,15 @@ async function main(): Promise<void> {
 
   if (normalizedCommand === "stop") {
     for (const line of await stopRecordedProcesses()) console.log(line);
+    return;
+  }
+
+  if (normalizedCommand === "restart") {
+    const previousSession = await readPidFile();
+    const restartOptions = parseRestartOptions(args, previousSession);
+    for (const line of await stopRecordedProcesses()) console.log(line);
+    await waitForPort(restartOptions.port);
+    await runRemote(restartOptions);
     return;
   }
 
@@ -87,6 +97,10 @@ async function main(): Promise<void> {
     return;
   }
 
+  await runRemote(options);
+}
+
+async function runRemote(options: CliOptions): Promise<void> {
   const remote = await RemoteConsole.start(options);
   console.log("");
   console.log("codex-remote-iphone is running");
@@ -118,6 +132,7 @@ Skill usage:
   [$codex-remote-iphone] qr
   [$codex-remote-iphone] status
   [$codex-remote-iphone] stop
+  [$codex-remote-iphone] restart
   [$codex-remote-iphone] max          # show maximum active devices
   [$codex-remote-iphone] max 3        # set maximum active devices to 3
   [$codex-remote-iphone] approvals
@@ -133,6 +148,7 @@ Raw npm usage:
   npm run qr
   npm run status
   npm run stop
+  npm run restart
   npm run max
   npm run max -- 3
   npm run approvals
@@ -147,6 +163,7 @@ Commands:
   new                   Start a separate phone-only Codex thread, not the current Desktop thread.
   start new             Same as new.
   stop                  Stop recorded bridge, app-server, and tunnel processes.
+  restart               Stop the recorded session, then start again with the same workspace, port, and thread mode.
   status                Show workspace, thread, Codex mode, URL, and process health.
   qr                    Rotate a one-time pairing token and print a fresh QR.
   approvals             List phone pairing requests waiting for desktop confirmation.
@@ -209,6 +226,53 @@ function parseOptions(args: string[]): CliOptions {
     }
   }
   return options;
+}
+
+function parseRestartOptions(args: string[], previousSession: RuntimePids | null): CliOptions {
+  const overrides = parseOptions(args);
+  if (!previousSession) return overrides;
+  const thread = parseThreadLabel(previousSession.threadLabel);
+  const hasWorkspace = hasOption(args, "--workspace", "-w");
+  const hasPort = hasOption(args, "--port", "-p");
+  const hasExplicitThread = args.includes("--thread-id");
+  const forceNewThread = args.includes("--new-thread");
+  const threadId = forceNewThread ? null : hasExplicitThread ? overrides.threadId : thread.threadId ?? overrides.threadId;
+  return {
+    workspace: hasWorkspace ? overrides.workspace : previousSession.workspace,
+    port: hasPort ? overrides.port : previousSession.port,
+    tunnel: args.includes("--no-tunnel") ? false : true,
+    threadId,
+    requireResume: Boolean(threadId),
+    desktopSync: forceNewThread || args.includes("--no-desktop-sync")
+      ? false
+      : previousSession.appServerMode === "app-server"
+        ? false
+        : overrides.desktopSync
+  };
+}
+
+function hasOption(args: string[], longName: string, shortName: string): boolean {
+  return args.includes(longName) || args.includes(shortName);
+}
+
+function parseThreadLabel(threadLabel: string | undefined): { mode: string | null; threadId: string | null } {
+  const match = threadLabel?.match(/^([^:]+):(.+)$/);
+  if (!match) return { mode: null, threadId: null };
+  if (match[1] !== "resumed") return { mode: match[1], threadId: null };
+  return { mode: match[1], threadId: match[2] };
+}
+
+async function waitForPort(port: number): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10_000) {
+    if (await isPortAvailable(port)) return;
+    await delay(250);
+  }
+  throw new Error(`Port ${port} did not become available after stopping the previous session`);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function printStatus(): Promise<void> {

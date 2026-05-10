@@ -477,11 +477,9 @@ export class RemoteConsole {
         this.appendTranscriptDelta("plan", String(params.delta ?? ""));
         this.broadcast({ type: "codex.planDelta", delta: params.delta, turnId: params.turnId });
       } else if (method === "item/commandExecution/outputDelta") {
-        this.appendTranscriptDelta("command", String(params.delta ?? ""));
         this.broadcast({ type: "command.output", delta: params.delta, itemId: params.itemId });
       } else if (method === "command/exec/outputDelta") {
         const text = Buffer.from(String(params.deltaBase64 ?? ""), "base64").toString("utf8");
-        this.appendTranscriptDelta("command", text);
         this.broadcast({ type: "command.output", delta: text, stream: params.stream });
       } else if (method === "turn/diff/updated") {
         this.currentDiff = String(params.diff ?? "");
@@ -491,7 +489,6 @@ export class RemoteConsole {
         this.broadcast({ type: "turn.completed", turnId: params.turnId });
       } else if (method === "error") {
         const message = JSON.stringify(params);
-        this.appendTranscript("error", message);
         this.broadcast({ type: "error", message });
       } else if (method === "serverRequest/resolved") {
         this.broadcast({ type: "approval.resolved", requestId: params.requestId });

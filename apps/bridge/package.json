@@ -10,6 +10,7 @@
     "help": "tsx src/cli.ts help",
     "doctor": "tsx src/cli.ts doctor",
     "start": "tsx src/cli.ts start",
+    "restart": "tsx src/cli.ts restart",
     "new": "tsx src/cli.ts new",
     "dev": "tsx src/cli.ts start --no-tunnel",
     "stop": "tsx src/cli.ts stop",

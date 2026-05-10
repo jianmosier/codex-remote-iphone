@@ -436,7 +436,7 @@ function resolvePatchParent(target: unknown, path: Array<string | number>): unkn
   return cursor;
 }
 
-function renderConversationOutput(conversation: ConversationState): string {
+export function renderConversationOutput(conversation: ConversationState): string {
   const chunks: string[] = [];
   for (const turn of conversation.turns ?? []) {
     for (const item of turn.items ?? []) {
@@ -450,14 +450,6 @@ function renderConversationOutput(conversation: ConversationState): string {
 function renderItem(item: Record<string, unknown>): string {
   const type = item.type;
   if (type === "agentMessage" || type === "plan") return stringValue(item.text);
-  if (type === "error") return stringValue(item.message);
-  if (type === "commandExecution") {
-    const command = Array.isArray(item.commandActions)
-      ? item.commandActions.map((action) => stringValue(action)).filter(Boolean).join("\n")
-      : "";
-    const output = stringValue(item.aggregatedOutput);
-    return [command ? `$ ${command}` : "", output].filter(Boolean).join("\n");
-  }
   return "";
 }
 

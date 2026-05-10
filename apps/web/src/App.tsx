@@ -113,6 +113,7 @@ export function App() {
 
   const hasRunningTurn = Boolean(session?.currentTurnId);
   const diffSummary = useMemo(() => summarizeDiff(session?.currentDiff ?? ""), [session?.currentDiff]);
+  const conversationTranscript = useMemo(() => transcript.filter(isConversationEntry), [transcript]);
 
   useEffect(() => {
     authenticatedRef.current = authenticated;
@@ -400,9 +401,9 @@ export function App() {
             <MessageSquare size={18} />
             Session
           </h2>
-          {transcript.length === 0 ? <p className="empty">Waiting for Codex output.</p> : null}
+          {conversationTranscript.length === 0 ? <p className="empty">Waiting for Codex output.</p> : null}
           <div className="conversation-list">
-            {transcript.map((entry) => (
+            {conversationTranscript.map((entry) => (
               <article className={`bubble ${entry.role}`} key={entry.id}>
                 <div className="bubble-meta">
                   <strong>{labelForRole(entry.role)}</strong>
@@ -606,6 +607,10 @@ function labelForRole(role: TranscriptEntry["role"]): string {
   if (role === "command") return "Command";
   if (role === "error") return "Error";
   return "System";
+}
+
+function isConversationEntry(entry: TranscriptEntry): boolean {
+  return entry.role === "user" || entry.role === "assistant" || entry.role === "plan";
 }
 
 function summarizeDiff(diff: string): string {

@@ -26,6 +26,8 @@
     "doctor": "npm --workspace @codex-remote-iphone/bridge run doctor --",
     "prestart": "npm --workspace @codex-remote-iphone/web run build",
     "start": "npm --workspace @codex-remote-iphone/bridge run start --",
+    "prerestart": "npm --workspace @codex-remote-iphone/web run build",
+    "restart": "npm --workspace @codex-remote-iphone/bridge run restart --",
     "prenew": "npm --workspace @codex-remote-iphone/web run build",
     "new": "npm --workspace @codex-remote-iphone/bridge run new --",
     "predev": "npm --workspace @codex-remote-iphone/web run build",

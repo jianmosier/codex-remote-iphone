@@ -84,6 +84,7 @@ The installer copies the skill into `$CODEX_HOME/skills/codex-remote-iphone` or 
 [$codex-remote-iphone] start
 [$codex-remote-iphone] new
 [$codex-remote-iphone] stop
+[$codex-remote-iphone] restart
 [$codex-remote-iphone] status
 [$codex-remote-iphone] qr
 [$codex-remote-iphone] max
@@ -95,6 +96,8 @@ The installer copies the skill into `$CODEX_HOME/skills/codex-remote-iphone` or 
 `max 2` means "set the maximum active device count to 2".
 
 `new` means "start an isolated phone-only Codex session". It does not bind phone turns to the current Codex Desktop thread.
+
+`restart` means "stop the recorded remote console, then start it again with the same workspace, port, thread label, and Codex mode". Use it after pulling code or changing the web UI.
 
 Codex should translate those skill commands into the local npm scripts for you. You should not need to remember the project directory or the underlying script names during normal use.
 

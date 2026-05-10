@@ -25,6 +25,7 @@ Supported command meanings:
 - `start`, `open`, `run`, `connect`, or `qr` with no active session: run the normal start workflow and show the phone QR code.
 - `new` or `start new`: run `npm run new` to start an isolated phone-only Codex thread. This does not bind the phone to the current Codex Desktop thread and uses standalone `app-server` mode.
 - `stop`: locate the project, run `npm run stop`, and report whether the recorded bridge, app-server, and tunnel processes were signaled.
+- `restart`: locate the project, run `npm run restart`, and show the new phone URL/QR. This should reuse the recorded workspace, port, thread label, and Codex mode unless the user passes explicit flags.
 - `status`: run `npm run status` and summarize the active workspace, URL, current thread label, Codex mode, and process health.
 - `qr`: when a session is already recorded, run `npm run qr`; this asks the local bridge to rotate a fresh one-time pairing token and then shows the new QR or URL. The tunnel hostname may stay the same, but the `#token=...` fragment should change.
 - `approvals`: run `npm run approvals` and summarize phone pairing requests waiting for desktop confirmation.
@@ -62,6 +63,12 @@ npm run start -- --workspace /absolute/path/to/workspace --thread-id 019e...
 
 ```bash
 npm run stop
+```
+
+7. After code or web UI updates, restart the recorded console with:
+
+```bash
+npm run restart
 ```
 
 ## Safety Defaults
