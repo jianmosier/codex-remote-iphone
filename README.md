@@ -73,40 +73,6 @@ After `npm run install-skill`, use the skill as the normal command surface:
 
 You should not need to remember the project directory during normal use. The installed skill records the clone path in `project-root.txt`.
 
-## Terminal Commands
-
-If you are not using the Codex skill, start a console manually:
-
-```bash
-npm run start -- --workspace /absolute/path/to/your/project
-```
-
-Start an isolated phone-only session:
-
-```bash
-npm run new -- --workspace /absolute/path/to/your/project
-```
-
-Run locally without Cloudflare:
-
-```bash
-npm run dev -- --workspace /absolute/path/to/your/project
-```
-
-Stop from another terminal:
-
-```bash
-npm run stop
-```
-
-Update an existing clone:
-
-```bash
-npm run update
-```
-
-`update` refuses to run when local uncommitted changes exist. On a clean clone it performs a fast-forward Git update, runs `npm install`, and reinstalls the Codex skill.
-
 ## How It Works
 
 - `desktop-ipc`: default inside Codex Desktop when `CODEX_THREAD_ID` and the local Desktop IPC socket are available. Phone prompts are relayed into the desktop-owned thread.
@@ -164,12 +130,12 @@ Sponsorship is optional. The code remains MIT licensed either way.
 
 Domestic sponsorship:
 
-![WeChat Pay](docs/sponsor/wechat-placeholder.png)
-![Alipay](docs/sponsor/alipay-placeholder.png)
+![WeChat Pay](docs/sponsor/wechat.jpg)
+![Alipay](docs/sponsor/alipay.jpg)
 
-Replace the placeholder images with the real payment QR code images before publishing a sponsorship-ready release.
+The two images above are optional coffee-money QR codes for people who want to support the project.
 
-GitHub Sponsors is not configured in the v0.1 placeholder release. When ready, uncomment and replace the username in `.github/FUNDING.yml`.
+GitHub Sponsors is not configured in the v0.1 release. When ready, uncomment and replace the username in `.github/FUNDING.yml`.
 
 ## Caveats
 

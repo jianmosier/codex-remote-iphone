@@ -1,10 +1,8 @@
 # Sponsor Images
 
-The public README shows the domestic sponsorship images from this folder.
+The public README shows the domestic sponsorship images from this folder:
 
-Current placeholder files:
+- `wechat.jpg`
+- `alipay.jpg`
 
-- `wechat-placeholder.png`
-- `alipay-placeholder.png`
-
-Before a sponsorship-ready public release, replace those placeholders with the real WeChat Pay and Alipay QR code images, or update the README links to the final filenames.
+Use original payment-code image files. Do not recreate them from screenshots or compressed previews; payment QR codes need to stay scannable.
