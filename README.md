@@ -124,7 +124,7 @@ The GitHub repository should contain the deliverable source project only. Local 
 
 Runtime data such as sessions, audit logs, uploaded images, downloaded `cloudflared`, and generated QR codes live under `~/.codex-remote-iphone/`, not in this repository.
 
-## Support
+## Buy Me A Coffee
 
 <table>
   <tr>
