@@ -1,0 +1,3 @@
+display_name: Codex Remote iPhone
+short_description: Start and diagnose the iPhone Codex console.
+default_prompt: Start codex-remote-iphone for this workspace and show me the QR code.

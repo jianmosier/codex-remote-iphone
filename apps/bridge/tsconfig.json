@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist"
+  },
+  "include": ["src", "test"]
+}

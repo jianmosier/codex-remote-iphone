@@ -1,0 +1,57 @@
+{
+  "name": "codex-remote-iphone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scan a QR code on your phone to control a local Codex session through a temporary Cloudflare tunnel.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jianmosier/codex-remote-iphone.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jianmosier/codex-remote-iphone/issues"
+  },
+  "homepage": "https://github.com/jianmosier/codex-remote-iphone#readme",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "workspaces": [
+    "apps/bridge",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "help": "npm --workspace @codex-remote-iphone/bridge run help",
+    "doctor": "npm --workspace @codex-remote-iphone/bridge run doctor --",
+    "prestart": "npm --workspace @codex-remote-iphone/web run build",
+    "start": "npm --workspace @codex-remote-iphone/bridge run start --",
+    "prenew": "npm --workspace @codex-remote-iphone/web run build",
+    "new": "npm --workspace @codex-remote-iphone/bridge run new --",
+    "predev": "npm --workspace @codex-remote-iphone/web run build",
+    "dev": "npm --workspace @codex-remote-iphone/bridge run dev --",
+    "stop": "npm --workspace @codex-remote-iphone/bridge run stop",
+    "status": "npm --workspace @codex-remote-iphone/bridge run status",
+    "qr": "npm --workspace @codex-remote-iphone/bridge run qr",
+    "approvals": "npm --workspace @codex-remote-iphone/bridge run approvals",
+    "approve": "npm --workspace @codex-remote-iphone/bridge run approve --",
+    "deny": "npm --workspace @codex-remote-iphone/bridge run deny --",
+    "max": "npm --workspace @codex-remote-iphone/bridge run max --",
+    "policy": "npm --workspace @codex-remote-iphone/bridge run policy --",
+    "logs": "npm --workspace @codex-remote-iphone/bridge run logs --",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "install-skill": "node scripts/install-skill.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vitest": "^4.0.13",
+    "tsx": "^4.21.0"
+  }
+}
