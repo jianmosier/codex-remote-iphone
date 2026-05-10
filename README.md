@@ -124,11 +124,7 @@ The GitHub repository should contain the deliverable source project only. Local 
 
 Runtime data such as sessions, audit logs, uploaded images, downloaded `cloudflared`, and generated QR codes live under `~/.codex-remote-iphone/`, not in this repository.
 
-## Buy Me A Coffee / 请喝咖啡
-
-Sponsorship is optional. The code remains MIT licensed either way.
-
-Domestic sponsorship:
+## Support
 
 <table>
   <tr>
@@ -142,10 +138,6 @@ Domestic sponsorship:
     </td>
   </tr>
 </table>
-
-The two images above are optional coffee-money QR codes for people who want to support the project.
-
-GitHub Sponsors is not configured in the v0.1 release. When ready, uncomment and replace the username in `.github/FUNDING.yml`.
 
 ## Caveats
 
