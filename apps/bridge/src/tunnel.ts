@@ -96,6 +96,14 @@ const dnsResolvers = [
   { name: "DNSPod", server: "119.29.29.29" },
   { name: "114DNS", server: "114.114.114.114" }
 ];
+const minimumDnsResolversRequired = Math.ceil(dnsResolvers.length / 2);
+
+export function hasEnoughDnsCoverage(
+  results: Array<{ ok: boolean }>,
+  required = minimumDnsResolversRequired
+): boolean {
+  return results.filter((result) => result.ok).length >= required;
+}
 
 export async function startQuickTunnel(port: number, onLog: (line: string) => void): Promise<QuickTunnel> {
   const bin = await requireCloudflared();
@@ -211,12 +219,18 @@ async function verifyQuickTunnel(url: string, onLog: (line: string) => void): Pr
       }`
     );
   }
-  const failedDns = dnsResults
-    .map((result, index) => ({ ...result, resolver: dnsResolvers[index] }))
-    .filter((result) => !result.ok);
-  if (failedDns.length) {
+  const namedDnsResults = dnsResults.map((result, index) => ({ ...result, resolver: dnsResolvers[index] }));
+  const failedDns = namedDnsResults.filter((result) => !result.ok);
+  if (!hasEnoughDnsCoverage(namedDnsResults)) {
     throw new Error(
       `quick tunnel DNS is not globally ready: ${failedDns
+        .map((result) => `${result.resolver.name}/${result.resolver.server}: ${result.detail}`)
+        .join("; ")}`
+    );
+  }
+  if (failedDns.length) {
+    onLog(
+      `quick tunnel DNS partial failure tolerated: ${failedDns
         .map((result) => `${result.resolver.name}/${result.resolver.server}: ${result.detail}`)
         .join("; ")}`
     );
