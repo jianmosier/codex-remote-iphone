@@ -8,11 +8,21 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { getDataDir } from "./config.js";
 import { commandExists, runCapture } from "./system.js";
 
+const cloudflaredPathEnvVar = "CODEX_REMOTE_IPHONE_CLOUDFLARED";
+const cloudflaredUrlEnvVar = "CODEX_REMOTE_IPHONE_CLOUDFLARED_URL";
+const downloadResponseTimeoutMs = 45_000;
+const downloadTimeoutMs = 180_000;
+
 export function parseTryCloudflareUrl(text: string): string | null {
   return text.match(/https:\/\/[-a-zA-Z0-9]+\.trycloudflare\.com/)?.[0] ?? null;
 }
 
 export async function findCloudflared(): Promise<string | null> {
+  const configured = process.env[cloudflaredPathEnvVar]?.trim();
+  if (configured) {
+    const version = await runCapture(configured, ["--version"], { timeoutMs: 5_000 });
+    if (version.code === 0) return configured;
+  }
   const existing = await commandExists("cloudflared");
   if (existing) return existing;
   const cached = resolve(getDataDir(), "bin", process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
@@ -34,26 +44,41 @@ export async function ensureCloudflared(onLog: (line: string) => void = () => un
   const existing = await findCloudflared();
   if (existing) return existing;
 
-  const url = resolveCloudflaredUrl();
-  onLog(`cloudflared not found; downloading ${url}`);
+  const sources = resolveInitialDownloadSources();
+  onLog(`cloudflared not found; trying download sources: ${sources.map((source) => source.label).join(", ")}`);
   const binDir = resolve(getDataDir(), "bin");
   await mkdir(binDir, { recursive: true });
-  const archive = resolve(tmpdir(), `cloudflared-${Date.now()}.tgz`);
   const bin = resolve(binDir, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
+  const errors: string[] = [];
+  let triedGitHubApi = false;
 
-  await download(url, archive, onLog);
-  if (url.endsWith(".tgz")) {
-    onLog("extracting cloudflared archive");
-    const result = await runCapture("tar", ["-xzf", archive, "-C", binDir], { timeoutMs: 60_000 });
-    if (result.code !== 0) throw new Error(`Failed to extract cloudflared: ${result.stderr}`);
-  } else {
-    onLog("installing cloudflared binary");
-    await rename(archive, bin);
+  for (let index = 0; index < sources.length; index += 1) {
+    const source = sources[index];
+    const archive = resolve(tmpdir(), `cloudflared-${Date.now()}-${index}${source.archive ? ".tgz" : ""}`);
+    try {
+      onLog(`trying cloudflared source: ${source.label} (${source.url})`);
+      await download(source, archive, onLog);
+      await installDownloadedCloudflared(source, archive, binDir, bin, onLog);
+      const version = await runCapture(bin, ["--version"], { timeoutMs: 5_000 });
+      if (version.code !== 0) throw new Error(`installed binary did not run: ${version.stderr || version.stdout}`);
+      onLog(`installed project-local cloudflared: ${bin}`);
+      return bin;
+    } catch (error) {
+      await rm(archive, { force: true });
+      await rm(bin, { force: true });
+      const message = `${source.label} failed: ${formatError(error)}`;
+      errors.push(message);
+      onLog(message);
+    }
+
+    if (index === sources.length - 1 && !triedGitHubApi) {
+      triedGitHubApi = true;
+      const apiSource = await resolveGitHubApiDownloadSource(onLog);
+      if (apiSource && !sources.some((candidate) => candidate.url === apiSource.url)) sources.push(apiSource);
+    }
   }
-  await rm(archive, { force: true });
-  await chmod(bin, 0o755);
-  onLog(`installed project-local cloudflared: ${bin}`);
-  return bin;
+
+  throw new Error(formatDownloadFailure(sources, bin, errors, await commandExists("curl"), await commandExists("wget")));
 }
 
 export type QuickTunnel = {
@@ -301,31 +326,166 @@ function probePublicRoute(url: string): Promise<{ ok: boolean; detail: string }>
 }
 
 export function resolveCloudflaredUrl(): string {
-  if (process.platform === "darwin" && process.arch === "arm64") {
-    return "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz";
-  }
-  if (process.platform === "darwin" && process.arch === "x64") {
-    return "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz";
-  }
-  if (process.platform === "linux" && process.arch === "x64") {
-    return "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64";
-  }
-  if (process.platform === "linux" && process.arch === "arm64") {
-    return "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64";
-  }
+  return `https://github.com/cloudflare/cloudflared/releases/latest/download/${resolveCloudflaredAssetName()}`;
+}
+
+type DownloadSource = {
+  label: string;
+  url: string;
+  archive: boolean;
+};
+
+function resolveCloudflaredAssetName(): string {
+  if (process.platform === "darwin" && process.arch === "arm64") return "cloudflared-darwin-arm64.tgz";
+  if (process.platform === "darwin" && process.arch === "x64") return "cloudflared-darwin-amd64.tgz";
+  if (process.platform === "linux" && process.arch === "x64") return "cloudflared-linux-amd64";
+  if (process.platform === "linux" && process.arch === "arm64") return "cloudflared-linux-arm64";
   throw new Error(`Automatic cloudflared download is not supported for ${process.platform}/${process.arch}`);
 }
 
-function download(url: string, target: string, onLog: (line: string) => void, redirects = 0): Promise<void> {
+function resolveInitialDownloadSources(): DownloadSource[] {
+  const configuredUrl = process.env[cloudflaredUrlEnvVar]?.trim();
+  const sources: DownloadSource[] = [];
+  if (configuredUrl) {
+    sources.push({
+      label: `${cloudflaredUrlEnvVar} override`,
+      url: configuredUrl,
+      archive: isArchiveUrl(configuredUrl)
+    });
+  }
+  let officialUrl: string | null = null;
+  try {
+    officialUrl = resolveCloudflaredUrl();
+  } catch (error) {
+    if (sources.length === 0) throw error;
+  }
+  if (!officialUrl) return sources;
+  sources.push({
+    label: "GitHub latest release",
+    url: officialUrl,
+    archive: isArchiveUrl(officialUrl)
+  });
+  return sources;
+}
+
+async function download(source: DownloadSource, target: string, onLog: (line: string) => void): Promise<void> {
+  const proxySummary = getProxyEnvSummary();
+  const downloaders = await resolveDownloaders(proxySummary);
+  const errors: string[] = [];
+
+  if (proxySummary) onLog(`proxy env detected (${proxySummary}); trying proxy-aware and direct download paths`);
+
+  for (const downloader of downloaders) {
+    try {
+      onLog(`trying ${downloader.label} for ${source.label}`);
+      await downloader.run(source.url, target, onLog);
+      return;
+    } catch (error) {
+      await rm(target, { force: true });
+      const message = `${downloader.label} failed: ${formatError(error)}`;
+      errors.push(message);
+      onLog(message);
+    }
+  }
+
+  throw new Error(errors.join("; "));
+}
+
+type Downloader = {
+  label: string;
+  run: (url: string, target: string, onLog: (line: string) => void) => Promise<void>;
+};
+
+async function resolveDownloaders(proxySummary: string | null): Promise<Downloader[]> {
+  const curl = await commandExists("curl");
+  const wget = await commandExists("wget");
+  const downloaders: Downloader[] = [];
+
+  if (proxySummary) {
+    if (curl) downloaders.push({ label: "curl with environment proxy", run: downloadWithCurl });
+    if (wget) downloaders.push({ label: "wget with environment proxy", run: downloadWithWget });
+    downloaders.push({ label: "node:https direct", run: downloadWithNodeHttps });
+    if (curl) {
+      downloaders.push({
+        label: "curl direct without proxy",
+        run: (url, target, onLog) => downloadWithCurl(url, target, onLog, { noProxy: true })
+      });
+    }
+    if (wget) {
+      downloaders.push({
+        label: "wget direct without proxy",
+        run: (url, target, onLog) => downloadWithWget(url, target, onLog, { noProxy: true })
+      });
+    }
+    return downloaders;
+  }
+
+  downloaders.push({ label: "node:https direct", run: downloadWithNodeHttps });
+  if (curl) downloaders.push({ label: "curl", run: downloadWithCurl });
+  if (wget) downloaders.push({ label: "wget", run: downloadWithWget });
+  return downloaders;
+}
+
+async function installDownloadedCloudflared(
+  source: DownloadSource,
+  downloadedPath: string,
+  binDir: string,
+  bin: string,
+  onLog: (line: string) => void
+): Promise<void> {
+  if (source.archive) {
+    onLog(`extracting cloudflared archive from ${source.label}`);
+    const result = await runCapture("tar", ["-xzf", downloadedPath, "-C", binDir], { timeoutMs: 60_000 });
+    if (result.code !== 0) throw new Error(`Failed to extract cloudflared: ${result.stderr || result.stdout}`);
+  } else {
+    onLog(`installing cloudflared binary from ${source.label}`);
+    await rename(downloadedPath, bin);
+  }
+  await rm(downloadedPath, { force: true });
+  await chmod(bin, 0o755);
+}
+
+async function resolveGitHubApiDownloadSource(onLog: (line: string) => void): Promise<DownloadSource | null> {
+  const apiUrl = "https://api.github.com/repos/cloudflare/cloudflared/releases/latest";
+  try {
+    const assetName = resolveCloudflaredAssetName();
+    onLog(`resolving cloudflared versioned asset from GitHub API for ${assetName}`);
+    const text = await readUrlText(apiUrl, onLog);
+    const release = JSON.parse(text) as {
+      assets?: Array<{ name?: string; browser_download_url?: string }>;
+    };
+    const asset = release.assets?.find((candidate) => candidate.name === assetName);
+    if (!asset?.browser_download_url) {
+      onLog(`GitHub API did not return an asset named ${assetName}`);
+      return null;
+    }
+    return {
+      label: "GitHub API versioned release",
+      url: asset.browser_download_url,
+      archive: isArchiveUrl(asset.browser_download_url)
+    };
+  } catch (error) {
+    onLog(`GitHub API source lookup failed: ${formatError(error)}`);
+    return null;
+  }
+}
+
+function downloadWithNodeHttps(url: string, target: string, onLog: (line: string) => void, redirects = 0): Promise<void> {
   return new Promise((resolve, reject) => {
     let responseStarted = false;
+    let request: ReturnType<typeof get>;
     const waiting = setInterval(() => {
       if (!responseStarted) onLog(`waiting for cloudflared download response from ${new URL(url).hostname}...`);
     }, 5_000);
     const cleanupWaiting = () => clearInterval(waiting);
-    const request = get(url, (response) => {
+    const noResponseTimer = setTimeout(() => {
+      if (!responseStarted) request.destroy(new Error("No response from download source after 45 seconds"));
+    }, downloadResponseTimeoutMs);
+    const cleanupNoResponseTimer = () => clearTimeout(noResponseTimer);
+    request = get(url, { headers: { "User-Agent": "codex-remote-iphone-setup" } }, (response) => {
       responseStarted = true;
       cleanupWaiting();
+      cleanupNoResponseTimer();
       if ([301, 302, 303, 307, 308].includes(response.statusCode ?? 0) && response.headers.location) {
         if (redirects > 5) {
           reject(new Error("Too many redirects while downloading cloudflared"));
@@ -334,7 +494,7 @@ function download(url: string, target: string, onLog: (line: string) => void, re
         response.resume();
         const redirected = new URL(response.headers.location, url).toString();
         onLog(`cloudflared download redirected to ${new URL(redirected).hostname}`);
-        download(redirected, target, onLog, redirects + 1).then(resolve, reject);
+        downloadWithNodeHttps(redirected, target, onLog, redirects + 1).then(resolve, reject);
         return;
       }
       if (response.statusCode !== 200) {
@@ -364,12 +524,282 @@ function download(url: string, target: string, onLog: (line: string) => void, re
         reject(error);
       });
     });
-    request.setTimeout(180_000, () => {
+    request.setTimeout(downloadTimeoutMs, () => {
       request.destroy(new Error("Timed out downloading cloudflared after 180 seconds"));
     });
     request.on("error", (error) => {
       cleanupWaiting();
+      cleanupNoResponseTimer();
       reject(error);
     });
   });
+}
+
+function downloadWithCurl(
+  url: string,
+  target: string,
+  onLog: (line: string) => void,
+  options: { noProxy?: boolean } = {}
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    let stderr = "";
+    let stdout = "";
+    onLog(`downloading cloudflared with curl from ${new URL(url).hostname}`);
+    const args = [
+      "--fail",
+      "--location",
+      "--show-error",
+      "--silent",
+      "--retry",
+      "2",
+      "--retry-delay",
+      "2",
+      "--connect-timeout",
+      "30",
+      "--speed-limit",
+      "1024",
+      "--speed-time",
+      "30",
+      "--max-time",
+      String(Math.floor(downloadTimeoutMs / 1000)),
+      "--output",
+      target,
+      url
+    ];
+    if (options.noProxy) args.splice(0, 0, "--noproxy", "*");
+    const child = spawn(
+      "curl",
+      args,
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    const heartbeat = setInterval(() => {
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(0);
+      onLog(`waiting for curl download (${seconds}s elapsed)...`);
+    }, 5_000);
+    const cleanup = () => clearInterval(heartbeat);
+    child.stdout.on("data", (chunk) => {
+      stdout = trimLog(`${stdout}${String(chunk)}`);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = trimLog(`${stderr}${String(chunk)}`);
+    });
+    child.on("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.on("close", (code) => {
+      cleanup();
+      if (code === 0) {
+        const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+        onLog(`downloaded cloudflared with curl in ${seconds}s`);
+        resolve();
+        return;
+      }
+      reject(new Error(`curl exited with code ${code}: ${stderr || stdout || "no output"}`));
+    });
+  });
+}
+
+function downloadWithWget(
+  url: string,
+  target: string,
+  onLog: (line: string) => void,
+  options: { noProxy?: boolean } = {}
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    let stderr = "";
+    let stdout = "";
+    const args = [
+      "--quiet",
+      "--tries=2",
+      "--timeout=30",
+      `--output-document=${target}`,
+      url
+    ];
+    const env = options.noProxy ? withoutProxyEnv() : process.env;
+    onLog(`downloading cloudflared with wget from ${new URL(url).hostname}`);
+    const child = spawn("wget", args, { env, stdio: ["ignore", "pipe", "pipe"] });
+    const heartbeat = setInterval(() => {
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(0);
+      onLog(`waiting for wget download (${seconds}s elapsed)...`);
+    }, 5_000);
+    const cleanup = () => clearInterval(heartbeat);
+    const timer = setTimeout(() => child.kill("SIGTERM"), downloadTimeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdout = trimLog(`${stdout}${String(chunk)}`);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = trimLog(`${stderr}${String(chunk)}`);
+    });
+    child.on("error", (error) => {
+      cleanup();
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      cleanup();
+      clearTimeout(timer);
+      if (code === 0) {
+        const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+        onLog(`downloaded cloudflared with wget in ${seconds}s`);
+        resolve();
+        return;
+      }
+      reject(new Error(`wget exited with code ${code}: ${stderr || stdout || "no output"}`));
+    });
+  });
+}
+
+async function readUrlText(url: string, onLog: (line: string) => void): Promise<string> {
+  const proxySummary = getProxyEnvSummary();
+  const curl = await commandExists("curl");
+  const attempts: Array<{ label: string; run: () => Promise<string> }> = [];
+
+  if (proxySummary && curl) {
+    attempts.push({ label: "curl with environment proxy", run: () => readUrlTextWithCurl(url) });
+    attempts.push({ label: "node:https direct", run: () => readUrlTextWithNodeHttps(url) });
+    attempts.push({ label: "curl direct without proxy", run: () => readUrlTextWithCurl(url, { noProxy: true }) });
+  } else {
+    attempts.push({ label: "node:https direct", run: () => readUrlTextWithNodeHttps(url) });
+    if (curl) attempts.push({ label: "curl", run: () => readUrlTextWithCurl(url) });
+  }
+
+  const errors: string[] = [];
+  for (const attempt of attempts) {
+    try {
+      onLog(`trying ${attempt.label} for GitHub API metadata`);
+      return await attempt.run();
+    } catch (error) {
+      errors.push(`${attempt.label} failed: ${formatError(error)}`);
+    }
+  }
+  throw new Error(errors.join("; "));
+}
+
+function readUrlTextWithNodeHttps(url: string, redirects = 0): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let request: ReturnType<typeof get>;
+    const timer = setTimeout(() => request.destroy(new Error("No response after 30 seconds")), 30_000);
+    request = get(url, { headers: { "User-Agent": "codex-remote-iphone-setup" } }, (response) => {
+      clearTimeout(timer);
+      if ([301, 302, 303, 307, 308].includes(response.statusCode ?? 0) && response.headers.location) {
+        if (redirects > 5) {
+          reject(new Error("Too many redirects"));
+          return;
+        }
+        response.resume();
+        const redirected = new URL(response.headers.location, url).toString();
+        readUrlTextWithNodeHttps(redirected, redirects + 1).then(resolve, reject);
+        return;
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`HTTP ${response.statusCode}`));
+        return;
+      }
+      let text = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        text += chunk;
+      });
+      response.on("end", () => resolve(text));
+      response.on("error", reject);
+    });
+    request.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
+function readUrlTextWithCurl(url: string, options: { noProxy?: boolean } = {}): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const args = ["--fail", "--location", "--show-error", "--silent", "--connect-timeout", "15", "--max-time", "30", url];
+    if (options.noProxy) args.splice(0, 0, "--noproxy", "*");
+    const child = spawn("curl", args, { stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = trimLog(`${stderr}${String(chunk)}`);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+      reject(new Error(`curl exited with code ${code}: ${stderr || stdout || "no output"}`));
+    });
+  });
+}
+
+function formatDownloadFailure(
+  sources: DownloadSource[],
+  installPath: string,
+  errors: string[],
+  curl: string | null,
+  wget: string | null
+): string {
+  const lines = [
+    "Could not install project-local cloudflared automatically.",
+    `Download sources tried: ${sources.map((source) => source.label).join(", ")}`,
+    `Install location: ${installPath}`,
+    `Failed attempts: ${errors.join("; ") || "none"}`,
+    "Automatic setup exhausted the available official download routes and local downloaders.",
+    "Fix options:",
+    "1. Install cloudflared yourself with your platform package manager, for example `brew install cloudflared` on macOS, then rerun `npm run setup`.",
+    `2. Or manually download the file above, extract/copy the cloudflared binary to ${installPath}, run \`chmod +x ${installPath}\`, then rerun \`npm run setup\`.`,
+    `3. Or set ${cloudflaredPathEnvVar}=/absolute/path/to/cloudflared before running setup.`,
+    `4. Or set ${cloudflaredUrlEnvVar}=https://your-mirror/cloudflared before running setup.`
+  ];
+  if (!curl) lines.push("Tip: installing curl gives setup another downloader and better proxy support.");
+  if (!wget) lines.push("Tip: installing wget gives setup one more automatic download path.");
+  return lines.join("\n");
+}
+
+function isArchiveUrl(url: string): boolean {
+  return new URL(url).pathname.endsWith(".tgz");
+}
+
+function withoutProxyEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]) {
+    delete env[name];
+  }
+  env.NO_PROXY = "*";
+  env.no_proxy = "*";
+  return env;
+}
+
+function getProxyEnvSummary(): string | null {
+  const names = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
+  const entries = names
+    .map((name) => [name, process.env[name]] as const)
+    .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));
+  if (entries.length === 0) return null;
+  return entries.map(([name, value]) => `${name}=${redactProxy(value)}`).join(", ");
+}
+
+function redactProxy(value: string): string {
+  try {
+    const parsed = new URL(value);
+    if (parsed.username) parsed.username = "***";
+    if (parsed.password) parsed.password = "***";
+    return parsed.toString();
+  } catch {
+    return value.replace(/\/\/[^/@]+@/, "//***@");
+  }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function trimLog(value: string): string {
+  return value.length > 2_000 ? value.slice(-2_000) : value;
 }

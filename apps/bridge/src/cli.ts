@@ -121,7 +121,7 @@ async function main(): Promise<void> {
 
 async function setupDependencies(): Promise<void> {
   console.log("codex-remote-iphone setup");
-  console.log("[1/3] Checking cloudflared in PATH and project cache...");
+  console.log("[1/3] Checking cloudflared override, PATH, and project cache...");
   const existing = await findCloudflared();
   if (existing) {
     console.log(`[2/3] cloudflared already available: ${existing}`);
@@ -136,10 +136,11 @@ async function setupDependencies(): Promise<void> {
   );
   console.log("[2/3] cloudflared is required and was not found.");
   console.log("      Setup will download Cloudflare's cloudflared command-line tool.");
-  console.log(`      Download source: ${downloadUrl}`);
+  console.log(`      Primary download source: ${downloadUrl}`);
   console.log(`      Install location: ${installPath}`);
   console.log("      Scope: project-local cache only; this will not install Homebrew or modify PATH.");
   console.log("      To avoid this download, install cloudflared yourself, then rerun setup.");
+  console.log("      Setup will try multiple release paths and available downloaders (node, curl, wget).");
   console.log("      This may take 1-3 minutes on a slow or proxied network.");
   console.log("      If there is no progress for 180 seconds, setup will fail with a timeout.");
   const bin = await ensureCloudflared((line) => console.log(`      ${line}`));
