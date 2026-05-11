@@ -31,6 +31,7 @@ Supported command meanings:
 - `stop`: locate the project, run `npm run stop`, and report whether the recorded bridge, app-server, and tunnel processes were signaled.
 - `restart`: locate the project, run `npm run restart`, and show the new phone URL/QR. This should reuse the recorded workspace, port, thread label, and Codex mode unless the user passes explicit flags.
 - `update`: locate the project, run `npm run update`, and summarize whether the clone was fast-forwarded from GitHub. If the command reports local changes, tell the user to commit, stash, or discard them before updating. After a successful update, suggest `[$codex-remote-iphone] restart` if a remote console is already running.
+- `setup`: run `npm run setup` to verify or download the project-local `cloudflared` binary before first start.
 - `status`: run `npm run status` and summarize the active workspace, URL, current thread label, Codex mode, and process health.
 - `qr`: when a session is already recorded, run `npm run qr`; this asks the local bridge to rotate a fresh one-time pairing token and then shows the new QR or URL. The tunnel hostname may stay the same, but the `#token=...` fragment should change.
 - `approvals`: run `npm run approvals` and summarize phone pairing requests waiting for desktop confirmation.
@@ -59,7 +60,7 @@ Every time `start`, `restart`, or `qr` prints a QR code, verify the output befor
 ## Workflow
 
 1. Locate the project. First read `project-root.txt` from this installed skill directory and use that absolute path if it contains a `package.json` named `codex-remote-iphone`. If the file is missing or stale, search likely workspace roots with `rg --files -g package.json` and choose the package whose root `package.json` has `"name": "codex-remote-iphone"`.
-2. Run `npm run doctor` from the project root before starting a remote session. Fix missing dependencies with `npm install` if needed.
+2. Run `npm run doctor` from the project root before starting a remote session. Fix missing npm dependencies with `npm install` if needed. If `cloudflared` is missing during a `start` request, stop there and tell the user to run `[$codex-remote-iphone] setup`; do not download `cloudflared` inside the start path. Do not start a remote tunnel until `cloudflared` is OK.
 3. Start the console with an explicit workspace:
 
 ```bash
@@ -112,7 +113,7 @@ cat ~/.codex-remote-iphone/config.json
 
 Common outcomes:
 
-- Missing `cloudflared`: `npm run start` should attempt a project-cache download. If it fails, report the platform and the download error.
+- Missing `cloudflared`: run `npm run setup` first. `start` intentionally fails fast instead of downloading during tunnel startup.
 - Port busy: ask the user to run with `--port <free-port>`.
 - Phone cannot connect: confirm the latest QR URL, that the computer is awake, and that the foreground process is still running.
 - Phone gets a reply but the Codex Desktop window does not show it: run `npm run status` and check `Codex mode`. If it is `app-server`, the bridge fell back to a standalone runner; check `appserver.mode.failed`, confirm `CODEX_THREAD_ID` is set, and confirm the Codex Desktop IPC socket exists under the system temp directory at `codex-ipc/ipc-<uid>.sock`.

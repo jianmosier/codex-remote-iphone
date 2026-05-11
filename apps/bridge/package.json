@@ -8,6 +8,7 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "help": "tsx src/cli.ts help",
+    "setup": "tsx src/cli.ts setup",
     "doctor": "tsx src/cli.ts doctor",
     "start": "tsx src/cli.ts start",
     "restart": "tsx src/cli.ts restart",

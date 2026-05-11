@@ -10,6 +10,7 @@ import { isPidRunning, readPidFile, stopRecordedProcesses, type RuntimePids } fr
 import { saveQrPng } from "./qrImage.js";
 import { RemoteConsole } from "./server.js";
 import { isPortAvailable } from "./system.js";
+import { ensureCloudflared, requireCloudflared } from "./tunnel.js";
 
 type CliOptions = {
   workspace: string;
@@ -38,7 +39,12 @@ async function main(): Promise<void> {
     for (const check of checks) {
       console.log(`${check.ok ? "OK" : "FAIL"} ${check.name}: ${check.detail}`);
     }
-    process.exitCode = checks.every((check) => check.ok || check.name === "cloudflared" || check.name === "web build") ? 0 : 1;
+    process.exitCode = checks.every((check) => check.ok || check.name === "web build") ? 0 : 1;
+    return;
+  }
+
+  if (normalizedCommand === "setup") {
+    await setupDependencies();
     return;
   }
 
@@ -106,7 +112,15 @@ async function main(): Promise<void> {
   await runRemote(options);
 }
 
+async function setupDependencies(): Promise<void> {
+  console.log("Checking cloudflared before starting codex-remote-iphone...");
+  const bin = await ensureCloudflared((line) => console.log(line));
+  console.log(`cloudflared ready: ${bin}`);
+  console.log("Setup complete. You can now use `[$codex-remote-iphone] start`.");
+}
+
 async function runRemote(options: CliOptions): Promise<void> {
+  if (options.tunnel) await requireCloudflared();
   const remote = await RemoteConsole.start(options);
   console.log("");
   console.log("codex-remote-iphone is running");
@@ -140,6 +154,7 @@ Skill usage:
   [$codex-remote-iphone] stop
   [$codex-remote-iphone] restart
   [$codex-remote-iphone] update       # pull the latest GitHub version safely
+  [$codex-remote-iphone] setup        # install/check cloudflared before first start
   [$codex-remote-iphone] max          # show maximum active devices
   [$codex-remote-iphone] max 3        # set maximum active devices to 3
   [$codex-remote-iphone] approvals
@@ -157,6 +172,7 @@ Raw npm usage:
   npm run stop
   npm run restart
   npm run update
+  npm run setup
   npm run max
   npm run max -- 3
   npm run approvals
@@ -173,6 +189,7 @@ Commands:
   stop                  Stop recorded bridge, app-server, and tunnel processes.
   restart               Stop the recorded session, then start again with the same workspace, port, and thread mode.
   update                Safely update this clone to the latest GitHub version and reinstall the skill.
+  setup                 Download or verify the project-local cloudflared binary before first start.
   status                Show workspace, thread, Codex mode, URL, and process health.
   qr                    Rotate a one-time pairing token and print a fresh QR.
   approvals             List phone pairing requests waiting for desktop confirmation.
@@ -324,6 +341,7 @@ async function updateFromGitHub(): Promise<void> {
   await runAndPrint("git", ["pull", "--ff-only"], repoRoot);
   await runAndPrint("npm", ["install"], repoRoot);
   await runAndPrint("npm", ["run", "install-skill"], repoRoot);
+  await runAndPrint("npm", ["run", "setup"], repoRoot);
   console.log("");
   console.log("Update complete. If a remote console is running, use `[$codex-remote-iphone] restart` to load the new bridge and phone UI.");
 }

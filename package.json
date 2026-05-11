@@ -23,6 +23,7 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "help": "npm --workspace @codex-remote-iphone/bridge run help",
+    "setup": "npm --workspace @codex-remote-iphone/bridge run setup",
     "doctor": "npm --workspace @codex-remote-iphone/bridge run doctor --",
     "prestart": "npm --workspace @codex-remote-iphone/web run build",
     "start": "npm --workspace @codex-remote-iphone/bridge run start --",

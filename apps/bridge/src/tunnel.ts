@@ -20,6 +20,16 @@ export async function findCloudflared(): Promise<string | null> {
   return version.code === 0 ? cached : null;
 }
 
+export async function requireCloudflared(): Promise<string> {
+  const bin = await findCloudflared();
+  if (!bin) {
+    throw new Error(
+      "cloudflared is not installed. Run `[$codex-remote-iphone] setup` or `npm run setup` once before starting the tunnel."
+    );
+  }
+  return bin;
+}
+
 export async function ensureCloudflared(onLog: (line: string) => void = () => undefined): Promise<string> {
   const existing = await findCloudflared();
   if (existing) return existing;
@@ -60,7 +70,7 @@ const dnsResolvers = [
 ];
 
 export async function startQuickTunnel(port: number, onLog: (line: string) => void): Promise<QuickTunnel> {
-  const bin = await ensureCloudflared(onLog);
+  const bin = await requireCloudflared();
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {

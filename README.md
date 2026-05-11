@@ -15,6 +15,7 @@ git clone https://github.com/jianmosier/codex-remote-iphone.git
 cd codex-remote-iphone
 npm install
 npm run install-skill
+npm run setup
 npm run doctor
 ```
 
@@ -50,7 +51,7 @@ Scan the QR code with your phone, then approve the pairing on your computer. Aft
 - Network access from the computer to Cloudflare Quick Tunnel.
 - A phone browser that can reach the generated `trycloudflare.com` URL.
 
-`cloudflared` is optional before first run. If it is missing, `npm run start` attempts to download a project-local copy.
+Run `npm run setup` once before the first start. It verifies `cloudflared` or downloads a project-local copy under `~/.codex-remote-iphone/bin/`. `start` fails fast if `cloudflared` is still missing.
 
 ## Skill Commands
 
@@ -63,6 +64,7 @@ After `npm run install-skill`, use the skill as the normal command surface:
 [$codex-remote-iphone] stop       # stop bridge and tunnel
 [$codex-remote-iphone] restart    # rebuild UI and restart with the recorded workspace
 [$codex-remote-iphone] update     # pull the latest GitHub version and reinstall the skill
+[$codex-remote-iphone] setup      # install/check cloudflared before first start
 [$codex-remote-iphone] new        # start an isolated phone-only Codex session
 [$codex-remote-iphone] max        # show maximum active devices
 [$codex-remote-iphone] max 2      # set maximum active devices to 2

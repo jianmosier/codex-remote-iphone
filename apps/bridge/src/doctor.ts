@@ -55,7 +55,7 @@ export async function runDoctor(port = 8787): Promise<DoctorCheck[]> {
   checks.push({
     name: "cloudflared",
     ok: Boolean(cloudflared),
-    detail: cloudflared ?? "not installed; start will attempt a project-cache download"
+    detail: cloudflared ?? "not installed; run npm run setup before start"
   });
 
   const config = await loadConfig();
