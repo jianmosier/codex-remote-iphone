@@ -78,16 +78,6 @@ After `npm run install-skill`, use the skill as the normal command surface:
 
 You should not need to remember the project directory during normal use. The installed skill records the clone path in `project-root.txt`.
 
-## Uninstall
-
-Use:
-
-```text
-[$codex-remote-iphone] uninstall
-```
-
-This stops recorded processes, removes the installed Codex skill, and removes the project-local `cloudflared` cache under `~/.codex-remote-iphone/bin/`. It does not remove system `cloudflared` installations such as Homebrew, and it keeps local config, audit logs, uploads, QR images, and the cloned repository.
-
 ## How It Works
 
 - `desktop-ipc`: default inside Codex Desktop when `CODEX_THREAD_ID` and the local Desktop IPC socket are available. Phone prompts are relayed into the desktop-owned thread.
