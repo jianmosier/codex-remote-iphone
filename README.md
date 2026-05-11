@@ -126,19 +126,6 @@ If the phone sees Cloudflare 1016/1033, rotate or restart until startup checks p
 [$codex-remote-iphone] restart
 ```
 
-## Repository Hygiene
-
-The GitHub repository should contain the deliverable source project only. Local runtime and debugging artifacts are intentionally ignored, including:
-
-- `node_modules/`
-- `apps/web/dist/`
-- `.playwright-cli/`
-- `coverage/`
-- `playwright-report/`
-- local logs, env files, caches, and temporary output
-
-Runtime data such as sessions, audit logs, uploaded images, downloaded `cloudflared`, and generated QR codes live under `~/.codex-remote-iphone/`, not in this repository.
-
 ## Buy Me A Coffee
 
 <p align="center">
