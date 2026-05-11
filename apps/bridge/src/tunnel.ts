@@ -43,13 +43,16 @@ export async function ensureCloudflared(onLog: (line: string) => void = () => un
 
   await download(url, archive, onLog);
   if (url.endsWith(".tgz")) {
+    onLog("extracting cloudflared archive");
     const result = await runCapture("tar", ["-xzf", archive, "-C", binDir], { timeoutMs: 60_000 });
     if (result.code !== 0) throw new Error(`Failed to extract cloudflared: ${result.stderr}`);
   } else {
+    onLog("installing cloudflared binary");
     await rename(archive, bin);
   }
   await rm(archive, { force: true });
   await chmod(bin, 0o755);
+  onLog(`installed project-local cloudflared: ${bin}`);
   return bin;
 }
 
@@ -315,7 +318,14 @@ function resolveCloudflaredUrl(): string {
 
 function download(url: string, target: string, onLog: (line: string) => void, redirects = 0): Promise<void> {
   return new Promise((resolve, reject) => {
+    let responseStarted = false;
+    const waiting = setInterval(() => {
+      if (!responseStarted) onLog(`waiting for cloudflared download response from ${new URL(url).hostname}...`);
+    }, 5_000);
+    const cleanupWaiting = () => clearInterval(waiting);
     const request = get(url, (response) => {
+      responseStarted = true;
+      cleanupWaiting();
       if ([301, 302, 303, 307, 308].includes(response.statusCode ?? 0) && response.headers.location) {
         if (redirects > 5) {
           reject(new Error("Too many redirects while downloading cloudflared"));
@@ -323,6 +333,7 @@ function download(url: string, target: string, onLog: (line: string) => void, re
         }
         response.resume();
         const redirected = new URL(response.headers.location, url).toString();
+        onLog(`cloudflared download redirected to ${new URL(redirected).hostname}`);
         download(redirected, target, onLog, redirects + 1).then(resolve, reject);
         return;
       }
@@ -356,6 +367,9 @@ function download(url: string, target: string, onLog: (line: string) => void, re
     request.setTimeout(180_000, () => {
       request.destroy(new Error("Timed out downloading cloudflared after 180 seconds"));
     });
-    request.on("error", reject);
+    request.on("error", (error) => {
+      cleanupWaiting();
+      reject(error);
+    });
   });
 }

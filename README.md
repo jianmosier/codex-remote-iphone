@@ -53,6 +53,8 @@ Scan the QR code with your phone, then approve the pairing on your computer. Aft
 
 Run `npm run setup` once before the first start. It verifies `cloudflared` or downloads a project-local copy under `~/.codex-remote-iphone/bin/`. `start` fails fast if `cloudflared` is still missing.
 
+During a first-time download, setup prints staged progress and a heartbeat such as `waiting for cloudflared download response...`. On slow or proxied networks it may take 1-3 minutes; if no response arrives within 180 seconds, it fails with a timeout instead of silently hanging.
+
 ## Skill Commands
 
 After `npm run install-skill`, use the skill as the normal command surface:
