@@ -29,6 +29,7 @@ Supported command meanings:
 - `start`, `open`, `run`, `connect`, or `qr` with no active session: run the normal start workflow and show the phone QR code.
 - `new` or `start new`: run `npm run new` to start an isolated phone-only Codex thread. This does not bind the phone to the current Codex Desktop thread and uses standalone `app-server` mode.
 - `stop`: locate the project, run `npm run stop`, and report whether the recorded bridge, app-server, and tunnel processes were signaled.
+- `uninstall`: locate the project and run `npm run uninstall`. This stops recorded processes, removes the installed Codex skill, and removes only the project-local `cloudflared` cache under `~/.codex-remote-iphone/bin/`. It must not remove Homebrew or other system `cloudflared` installations.
 - `restart`: locate the project, run `npm run restart`, and show the new phone URL/QR. This should reuse the recorded workspace, port, thread label, and Codex mode unless the user passes explicit flags.
 - `update`: locate the project, run `npm run update`, and summarize whether the clone was fast-forwarded from GitHub. If the command reports local changes, tell the user to commit, stash, or discard them before updating. After a successful update, suggest `[$codex-remote-iphone] restart` if a remote console is already running.
 - `setup`: run `npm run setup` to verify or download the project-local `cloudflared` binary before first start.

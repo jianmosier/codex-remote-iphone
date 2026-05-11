@@ -35,6 +35,7 @@
     "predev": "npm --workspace @codex-remote-iphone/web run build",
     "dev": "npm --workspace @codex-remote-iphone/bridge run dev --",
     "stop": "npm --workspace @codex-remote-iphone/bridge run stop",
+    "uninstall": "npm --workspace @codex-remote-iphone/bridge run uninstall",
     "status": "npm --workspace @codex-remote-iphone/bridge run status",
     "qr": "npm --workspace @codex-remote-iphone/bridge run qr",
     "approvals": "npm --workspace @codex-remote-iphone/bridge run approvals",

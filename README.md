@@ -62,6 +62,7 @@ After `npm run install-skill`, use the skill as the normal command surface:
 [$codex-remote-iphone] qr         # rotate a fresh one-time pairing token
 [$codex-remote-iphone] status     # show workspace, URL, mode, and process health
 [$codex-remote-iphone] stop       # stop bridge and tunnel
+[$codex-remote-iphone] uninstall  # remove installed skill and project-local cloudflared
 [$codex-remote-iphone] restart    # rebuild UI and restart with the recorded workspace
 [$codex-remote-iphone] update     # pull the latest GitHub version and reinstall the skill
 [$codex-remote-iphone] setup      # install/check cloudflared before first start
@@ -74,6 +75,16 @@ After `npm run install-skill`, use the skill as the normal command surface:
 ```
 
 You should not need to remember the project directory during normal use. The installed skill records the clone path in `project-root.txt`.
+
+## Uninstall
+
+Use:
+
+```text
+[$codex-remote-iphone] uninstall
+```
+
+This stops recorded processes, removes the installed Codex skill, and removes the project-local `cloudflared` cache under `~/.codex-remote-iphone/bin/`. It does not remove system `cloudflared` installations such as Homebrew, and it keeps local config, audit logs, uploads, QR images, and the cloned repository.
 
 ## How It Works
 

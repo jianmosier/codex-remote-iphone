@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
+import { rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 import qrcode from "qrcode-terminal";
 import { AuditLog } from "./audit.js";
-import { loadConfig, normalizeConfig, saveConfig, type AppConfig } from "./config.js";
+import { getDataDir, loadConfig, normalizeConfig, saveConfig, type AppConfig } from "./config.js";
 import { runDoctor } from "./doctor.js";
 import { isPidRunning, readPidFile, stopRecordedProcesses, type RuntimePids } from "./pidStore.js";
 import { saveQrPng } from "./qrImage.js";
@@ -50,6 +52,11 @@ async function main(): Promise<void> {
 
   if (normalizedCommand === "stop") {
     for (const line of await stopRecordedProcesses()) console.log(line);
+    return;
+  }
+
+  if (normalizedCommand === "uninstall") {
+    await uninstallLocalInstall();
     return;
   }
 
@@ -119,6 +126,29 @@ async function setupDependencies(): Promise<void> {
   console.log("Setup complete. You can now use `[$codex-remote-iphone] start`.");
 }
 
+async function uninstallLocalInstall(): Promise<void> {
+  console.log("Stopping recorded codex-remote-iphone processes...");
+  for (const line of await stopRecordedProcesses()) console.log(line);
+
+  const projectCloudflared = resolve(
+    getDataDir(),
+    "bin",
+    process.platform === "win32" ? "cloudflared.exe" : "cloudflared"
+  );
+  const projectBinDir = resolve(getDataDir(), "bin");
+  const skillDir = resolve(getCodexHome(), "skills", "codex-remote-iphone");
+
+  await rm(projectCloudflared, { force: true });
+  await rm(projectBinDir, { recursive: true, force: true });
+  console.log(`Removed project-local cloudflared cache if present: ${projectBinDir}`);
+
+  await rm(skillDir, { recursive: true, force: true });
+  console.log(`Removed installed Codex skill: ${skillDir}`);
+  console.log(`Kept local data such as config, audit logs, uploads, and QR images: ${getDataDir()}`);
+  console.log("System cloudflared installations, such as Homebrew, were not removed.");
+  console.log("Project clone was not removed.");
+}
+
 async function runRemote(options: CliOptions): Promise<void> {
   if (options.tunnel) await requireCloudflared();
   const remote = await RemoteConsole.start(options);
@@ -152,6 +182,7 @@ Skill usage:
   [$codex-remote-iphone] qr
   [$codex-remote-iphone] status
   [$codex-remote-iphone] stop
+  [$codex-remote-iphone] uninstall    # remove installed skill and project-local cloudflared
   [$codex-remote-iphone] restart
   [$codex-remote-iphone] update       # pull the latest GitHub version safely
   [$codex-remote-iphone] setup        # install/check cloudflared before first start
@@ -170,6 +201,7 @@ Raw npm usage:
   npm run qr
   npm run status
   npm run stop
+  npm run uninstall
   npm run restart
   npm run update
   npm run setup
@@ -187,6 +219,7 @@ Commands:
   new                   Start a separate phone-only Codex thread, not the current Desktop thread.
   start new             Same as new.
   stop                  Stop recorded bridge, app-server, and tunnel processes.
+  uninstall             Stop processes, remove installed skill, and remove project-local cloudflared cache.
   restart               Stop the recorded session, then start again with the same workspace, port, and thread mode.
   update                Safely update this clone to the latest GitHub version and reinstall the skill.
   setup                 Download or verify the project-local cloudflared binary before first start.
@@ -252,6 +285,10 @@ function parseOptions(args: string[]): CliOptions {
     }
   }
   return options;
+}
+
+function getCodexHome(): string {
+  return process.env.CODEX_HOME ? resolve(process.env.CODEX_HOME) : resolve(homedir(), ".codex");
 }
 
 function parseRestartOptions(args: string[], previousSession: RuntimePids | null): CliOptions {

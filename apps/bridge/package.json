@@ -16,6 +16,7 @@
     "new": "tsx src/cli.ts new",
     "dev": "tsx src/cli.ts start --no-tunnel",
     "stop": "tsx src/cli.ts stop",
+    "uninstall": "tsx src/cli.ts uninstall",
     "status": "tsx src/cli.ts status",
     "qr": "tsx src/cli.ts qr",
     "approvals": "tsx src/cli.ts approvals",
