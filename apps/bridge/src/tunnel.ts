@@ -300,7 +300,7 @@ function probePublicRoute(url: string): Promise<{ ok: boolean; detail: string }>
   });
 }
 
-function resolveCloudflaredUrl(): string {
+export function resolveCloudflaredUrl(): string {
   if (process.platform === "darwin" && process.arch === "arm64") {
     return "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz";
   }

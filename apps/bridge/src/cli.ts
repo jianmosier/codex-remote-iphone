@@ -12,7 +12,7 @@ import { isPidRunning, readPidFile, stopRecordedProcesses, type RuntimePids } fr
 import { saveQrPng } from "./qrImage.js";
 import { RemoteConsole } from "./server.js";
 import { isPortAvailable } from "./system.js";
-import { ensureCloudflared, findCloudflared, requireCloudflared } from "./tunnel.js";
+import { ensureCloudflared, findCloudflared, requireCloudflared, resolveCloudflaredUrl } from "./tunnel.js";
 
 type CliOptions = {
   workspace: string;
@@ -128,7 +128,18 @@ async function setupDependencies(): Promise<void> {
     console.log("[3/3] Setup complete. You can now use `[$codex-remote-iphone] start`.");
     return;
   }
-  console.log("[2/3] cloudflared not found; downloading a project-local copy.");
+  const downloadUrl = resolveCloudflaredUrl();
+  const installPath = resolve(
+    getDataDir(),
+    "bin",
+    process.platform === "win32" ? "cloudflared.exe" : "cloudflared"
+  );
+  console.log("[2/3] cloudflared is required and was not found.");
+  console.log("      Setup will download Cloudflare's cloudflared command-line tool.");
+  console.log(`      Download source: ${downloadUrl}`);
+  console.log(`      Install location: ${installPath}`);
+  console.log("      Scope: project-local cache only; this will not install Homebrew or modify PATH.");
+  console.log("      To avoid this download, install cloudflared yourself, then rerun setup.");
   console.log("      This may take 1-3 minutes on a slow or proxied network.");
   console.log("      If there is no progress for 180 seconds, setup will fail with a timeout.");
   const bin = await ensureCloudflared((line) => console.log(`      ${line}`));
