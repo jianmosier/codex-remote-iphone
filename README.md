@@ -4,8 +4,6 @@ Use your iPhone to control the Codex session running on your computer.
 
 `codex-remote-iphone` starts a small local bridge, opens a temporary Cloudflare Quick Tunnel, prints a QR code, and lets your phone send prompts into Codex Desktop after local approval.
 
-This is a v0.1 MVP / experimental project. The code is MIT licensed and can be used, modified, self-hosted, distributed, and used commercially.
-
 ## Quick Start
 
 ### 1. Install
