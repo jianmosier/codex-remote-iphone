@@ -2,6 +2,7 @@
 
 The public README shows the domestic sponsorship images from this folder:
 
+- `coffee.svg`
 - `wechat.jpg`
 - `alipay.jpg`
 

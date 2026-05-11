@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Buy me a coffee</title>
+  <desc id="desc">A small friendly coffee cup illustration for the sponsorship section.</desc>
+  <defs>
+    <linearGradient id="steam" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#86b7a8" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#86b7a8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#19241f" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+  <rect width="720" height="360" rx="34" fill="#f7f4ea"/>
+  <circle cx="139" cy="83" r="38" fill="#f1c46b" opacity="0.9"/>
+  <circle cx="612" cy="284" r="52" fill="#9fd0c2" opacity="0.35"/>
+  <path d="M300 118c-20-28 22-37 3-67" fill="none" stroke="url(#steam)" stroke-width="13" stroke-linecap="round"/>
+  <path d="M359 114c-20-27 23-39 3-69" fill="none" stroke="url(#steam)" stroke-width="13" stroke-linecap="round"/>
+  <path d="M418 118c-20-28 22-37 3-67" fill="none" stroke="url(#steam)" stroke-width="13" stroke-linecap="round"/>
+  <g filter="url(#shadow)">
+    <path d="M219 144h260l-22 122c-6 35-36 61-72 61h-73c-36 0-66-26-72-61z" fill="#ffffff" stroke="#26342f" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M478 174h30c35 0 58 24 54 55-4 30-33 52-67 52h-25l10-50h20c14 0 27-9 29-21 2-13-8-23-24-23h-29z" fill="#ffffff" stroke="#26342f" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M262 178h179l-12 60c-5 24-25 41-49 41h-59c-24 0-44-17-49-41z" fill="#117a65" opacity="0.14"/>
+    <path d="M303 229c20 20 72 20 92 0" fill="none" stroke="#26342f" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="314" cy="205" r="8" fill="#26342f"/>
+    <circle cx="386" cy="205" r="8" fill="#26342f"/>
+  </g>
+  <path d="M217 337h284" stroke="#26342f" stroke-width="10" stroke-linecap="round" opacity="0.18"/>
+</svg>

@@ -126,18 +126,23 @@ Runtime data such as sessions, audit logs, uploaded images, downloaded `cloudfla
 
 ## Buy Me A Coffee
 
-<table>
-  <tr>
-    <td align="center">
-      <strong>WeChat Pay</strong><br>
-      <img src="docs/sponsor/wechat.jpg" alt="WeChat Pay QR code" width="220">
-    </td>
-    <td align="center">
-      <strong>Alipay</strong><br>
-      <img src="docs/sponsor/alipay.jpg" alt="Alipay QR code" width="220">
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/sponsor/coffee.svg" alt="Coffee cup illustration" width="320">
+</p>
+
+<details>
+  <summary><strong>WeChat Pay</strong></summary>
+  <p>
+    <img src="docs/sponsor/wechat.jpg" alt="WeChat Pay QR code" width="220">
+  </p>
+</details>
+
+<details>
+  <summary><strong>Alipay</strong></summary>
+  <p>
+    <img src="docs/sponsor/alipay.jpg" alt="Alipay QR code" width="220">
+  </p>
+</details>
 
 ## Caveats
 
